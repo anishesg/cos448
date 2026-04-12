@@ -1,0 +1,63 @@
+# Dependencies (will be installed in container)
+node_modules/
+dashboard/node_modules/
+pipeline/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+pipeline/.env
+
+# Session data
+.session/
+.browser-lock
+
+# Database files (will use Railway volume)
+*.db
+*.db-shm
+*.db-wal
+
+# Artifacts
+artifacts/
+
+# Campaign configs
+campaign.config.json
+campaign.*.config.json
+
+# CSV files
+leads.csv
+fb-commenters.csv
+fb-commenters-remaining.csv
+fb-group-leads.csv
+*.csv
+!leads.example.csv
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+build/
+
+# Dashboard (not deployed to Railway)
+dashboard/
+
+# Tests
+tests/
+
+# Railway
+.railway/
+
+# Documentation
+README.md

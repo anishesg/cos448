@@ -1,0 +1,12 @@
+{
+  "leadsCsvPath": "./leads.csv",
+  "messageTemplatePath": "./message-template.txt",
+  "imagePath": "",
+  "userDataDir": "./.session/facebook",
+  "threadUrlTemplate": "https://www.facebook.com/messages/t/{messageId}",
+  "browserChannel": "chrome",
+  "headless": false,
+  "sendMode": "manual",
+  "postActionDelayMs": 45000,
+  "startAtRow": 1
+}

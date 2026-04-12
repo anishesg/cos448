@@ -1,0 +1,19 @@
+{
+  "name": "fb_outreach",
+  "version": "1.0.0",
+  "description": "Review-first Playwright helper for Facebook Messenger lead follow-up",
+  "main": "scripts/fb-review-send.js",
+  "scripts": {
+    "start": "node scripts/fb-review-send.js --config campaign.config.json",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "csv-parse": "^6.2.1",
+    "csv-stringify": "^6.7.0",
+    "playwright": "^1.59.1"
+  }
+}

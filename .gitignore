@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+pipeline/node_modules/
+
+# Environment variables
+.env
+pipeline/.env
+
+# Session data
+.session/
+.browser-lock
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+pipeline/*.db
+pipeline/*.db-shm
+pipeline/*.db-wal
+
+# Artifacts
+artifacts/
+
+# Campaign configs (contain sensitive data)
+campaign.config.json
+campaign.*.config.json
+!campaign.config.example.json
+
+# CSV files (contain user data)
+leads.csv
+fb-commenters.csv
+fb-commenters-remaining.csv
+fb-group-leads.csv
+*.csv
+!leads.example.csv
+
+# Message templates (might contain sensitive content)
+message-template.txt
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+dist/
+build/
+
+# Electron build
+dashboard/dist/
+dashboard/out/
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+
+# Railway
+.railway/
