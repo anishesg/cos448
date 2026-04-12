@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "cd pipeline && node email-pipeline.js",
+    "startCommand": "node email-pipeline.js",
     "restartPolicyType": "on_failure",
     "restartPolicyMaxRetries": 3
   }
