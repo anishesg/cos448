@@ -1,10 +1,14 @@
 /**
- * Main entry point - runs BOTH email pipeline and FB scraping
- * Use this for local development with full functionality
+ * Email Pipeline - Scheduling, Reminders, Follow-ups
  *
- * For production deployments:
- * - Railway: Use email-pipeline.js (scheduling/emails only)
- * - Local: Use fb-pipeline.js (scraping/autopilot only)
+ * This module runs ONLY the email/scheduling automation:
+ * - Detects form signups from Google Sheets
+ * - Schedules meetings via Google Calendar
+ * - Sends email reminders
+ * - Sends post-meeting follow-ups
+ *
+ * NO Facebook scraping or browser automation.
+ * Safe to deploy to Railway or other cloud platforms.
  */
 
 import "dotenv/config";
@@ -15,9 +19,6 @@ import { runDetectSignups } from "./jobs/detect-signups.js";
 import { runSchedule } from "./jobs/schedule.js";
 import { runRemind } from "./jobs/remind.js";
 import { runFollowup } from "./jobs/followup.js";
-import { runScrapeGroups } from "./jobs/scrape-groups.js";
-import { runDiscoverGroups } from "./jobs/discover-groups.js";
-import { runExportLeads } from "./jobs/export-leads.js";
 
 // Initialize DB (creates tables if needed)
 getDb();
@@ -32,12 +33,15 @@ try {
     console.log("✓ Google auth verified successfully.");
   }
 } catch (err) {
-  console.error("WARNING: Google auth failed. Run 'npm run reauth' to re-authorize with needed scopes.");
+  console.error("⚠️  WARNING: Google auth failed. Run 'npm run reauth' to re-authorize with needed scopes.");
   console.error("Error:", err.message);
   console.error("The pipeline will start but jobs may fail until auth is fixed.\n");
 }
 
-console.log("\n🚀 FULL PIPELINE MODE (Email + FB Scraping)");
+console.log("\n📧 EMAIL PIPELINE MODE");
+console.log("=" .repeat(60));
+console.log("Running: Scheduling, Reminders, Follow-ups");
+console.log("Not running: FB scraping (use fb-pipeline.js for that)");
 console.log("=" .repeat(60));
 
 // --- Email/Scheduling Cron Jobs ---
@@ -66,36 +70,11 @@ cron.schedule("*/30 * * * *", () => {
   runFollowup(auth);
 });
 
-// --- FB Lead Finder Cron Jobs ---
-
-// Scrape groups: 3x/day at 7am, 11am, 3pm (avoids messenger bot's evening hours)
-cron.schedule("0 7,11,15 * * *", () => {
-  console.log(`[${new Date().toLocaleTimeString()}] Running group scrape...`);
-  runScrapeGroups();
-});
-
-// Discover new groups: daily at 5am
-cron.schedule("0 5 * * *", () => {
-  console.log(`[${new Date().toLocaleTimeString()}] Running group discovery...`);
-  runDiscoverGroups();
-});
-
-// Export leads to CSV: every 2 hours
-cron.schedule("30 */2 * * *", () => {
-  console.log(`[${new Date().toLocaleTimeString()}] Running lead export...`);
-  runExportLeads();
-});
-
 console.log("\nActive Jobs:");
-console.log("  📧 Email Pipeline:");
-console.log("     - Detect signups:    every 5 min");
-console.log("     - Schedule meets:    every 5 min (offset)");
-console.log("     - Send reminders:    every 10 min");
-console.log("     - Send follow-ups:   every 30 min");
-console.log("\n  🔍 FB Lead Finder:");
-console.log("     - Scrape FB groups:  3x/day (7am, 11am, 3pm)");
-console.log("     - Discover groups:   daily at 5am");
-console.log("     - Export leads:      every 2 hours");
+console.log("  - Detect signups:    every 5 min");
+console.log("  - Schedule meets:    every 5 min (offset)");
+console.log("  - Send reminders:    every 10 min");
+console.log("  - Send follow-ups:   every 30 min");
 console.log("\nPress Ctrl+C to stop.\n");
 
 // Run detection once immediately on startup

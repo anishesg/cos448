@@ -53,6 +53,17 @@ build/
 # Dashboard (not deployed to Railway)
 dashboard/
 
+# FB Scraping (local only, not deployed to Railway)
+pipeline/fb-pipeline.js
+pipeline/autopilot.js
+pipeline/debug-scrape.js
+pipeline/test-autopilot.js
+pipeline/fb-finder/
+pipeline/jobs/scrape-groups.js
+pipeline/jobs/discover-groups.js
+pipeline/jobs/export-leads.js
+scripts/fb-review-send.js
+
 # Tests
 tests/
 

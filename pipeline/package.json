@@ -5,6 +5,9 @@
   "description": "Automated campaign pipeline: form detection, scheduling, emails, reminders",
   "scripts": {
     "start": "node index.js",
+    "start:email": "node email-pipeline.js",
+    "start:fb": "node fb-pipeline.js",
+    "start:autopilot": "node autopilot.js",
     "reauth": "node scripts/reauth.js"
   },
   "dependencies": {

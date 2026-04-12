@@ -1,5 +1,5 @@
-# Use official Playwright image with all browser dependencies
-FROM mcr.microsoft.com/playwright:v1.48.0-jammy
+# Email Pipeline - No browser automation, lightweight deployment
+FROM node:20-slim
 
 # Set working directory
 WORKDIR /app
@@ -9,23 +9,24 @@ COPY pipeline/package*.json ./pipeline/
 WORKDIR /app/pipeline
 RUN npm ci --production
 
-# Copy pipeline code
-COPY pipeline/ ./
-
-# Copy other necessary files
-WORKDIR /app
-COPY scripts/ ./scripts/
-COPY message-template.txt ./
-COPY campaign.config.example.json ./
+# Copy only email pipeline code (no FB scraping, no Playwright)
+COPY pipeline/email-pipeline.js ./
+COPY pipeline/db.js ./
+COPY pipeline/config.js ./
+COPY pipeline/google/ ./google/
+COPY pipeline/llm/ ./llm/
+COPY pipeline/templates/ ./templates/
+COPY pipeline/jobs/detect-signups.js ./jobs/
+COPY pipeline/jobs/schedule.js ./jobs/
+COPY pipeline/jobs/remind.js ./jobs/
+COPY pipeline/jobs/followup.js ./jobs/
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-ENV NODE_OPTIONS=--max-old-space-size=4096
 
 # Create data directory for SQLite (will be mounted as volume)
 RUN mkdir -p /app/data
 
-# Run the pipeline
+# Run the email pipeline only
 WORKDIR /app/pipeline
-CMD ["node", "index.js"]
+CMD ["node", "email-pipeline.js"]
