@@ -25,6 +25,8 @@ import {
   Brain,
   Sparkles,
   X,
+  MessageCircle,
+  BarChart2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -192,6 +194,24 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             label="Emails"
             active={isActive("/v3/emails")}
           />
+          <Link
+            href="/v3/notifications"
+            className={`v3-nav-item ${isActive("/v3/notifications") ? "active" : ""}`}
+          >
+            <span className="v3-nav-item-icon"><MessageCircle size={16} /></span>
+            Notifications
+            <span style={{
+              marginLeft: "auto",
+              fontSize: 10,
+              fontWeight: 600,
+              padding: "2px 6px",
+              borderRadius: 4,
+              background: "rgba(99,102,241,0.12)",
+              color: "var(--v3-accent-indigo)",
+              letterSpacing: "0.03em",
+              flexShrink: 0,
+            }}>iMessage</span>
+          </Link>
 
           {/* Records section */}
           <div className="v3-nav-section-label">Records</div>
@@ -266,7 +286,8 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             defaultOpen={
               isActive("/v3/intelligence") ||
               isActive("/v3/watchtower") ||
-              isActive("/v3/briefing")
+              isActive("/v3/briefing") ||
+              isActive("/v3/reports")
             }
           >
             <NavItem
@@ -286,6 +307,12 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
               icon={<BookOpen size={14} />}
               label="Briefings"
               active={isActive("/v3/briefing")}
+            />
+            <NavItem
+              href="/v3/reports"
+              icon={<BarChart2 size={14} />}
+              label="Reports"
+              active={isActive("/v3/reports")}
             />
           </NavGroup>
 

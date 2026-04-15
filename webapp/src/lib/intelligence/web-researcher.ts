@@ -6,55 +6,11 @@ import { MODELS } from "@/lib/bedrock";
 import { indexChunk, createSource } from "./rag";
 import { db } from "@/lib/db";
 import { contactResearch } from "@/lib/db/schema";
+import { tavilySearch, type TavilyResult } from "./tavily";
 
 const bedrock = new BedrockRuntimeClient({
   region: process.env.AWS_REGION ?? "us-east-1",
 });
-
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
-
-interface TavilyResult {
-  title: string;
-  url: string;
-  content: string;
-  score: number;
-}
-
-async function tavilySearch(
-  query: string,
-  opts?: { maxResults?: number; searchDepth?: "basic" | "advanced" }
-): Promise<TavilyResult[]> {
-  if (!TAVILY_API_KEY) {
-    console.warn("TAVILY_API_KEY not set, skipping web search");
-    return [];
-  }
-
-  try {
-    const res = await fetch(TAVILY_SEARCH_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: TAVILY_API_KEY,
-        query,
-        max_results: opts?.maxResults ?? 5,
-        search_depth: opts?.searchDepth ?? "basic",
-        include_answer: false,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("Tavily search failed:", res.status, await res.text());
-      return [];
-    }
-
-    const data = await res.json();
-    return (data.results ?? []) as TavilyResult[];
-  } catch (err) {
-    console.error("Tavily search error:", err);
-    return [];
-  }
-}
 
 async function synthesizeResearch(
   query: string,
@@ -107,12 +63,36 @@ export async function researchContact(opts: {
   }
 
   const domain = opts.email.split("@")[1];
-  if (domain && !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"].includes(domain)) {
+  const isPersonalDomain = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"].includes(domain ?? "");
+
+  if (domain && !isPersonalDomain) {
     queries.push(`${domain} company about`);
   }
 
   if (opts.name) {
     queries.push(`"${opts.name}" education OR career OR interests`);
+  }
+
+  // Education-specific queries
+  const ctx = (opts.emailContext ?? "").toLowerCase();
+  const isEducationContext =
+    ctx.includes("college") ||
+    ctx.includes("admission") ||
+    ctx.includes("application") ||
+    ctx.includes("high school") ||
+    ctx.includes("university") ||
+    ctx.includes("gpa") ||
+    ctx.includes("essay") ||
+    (domain && (domain.endsWith(".edu") || domain.includes("k12")));
+
+  if (isEducationContext && opts.name) {
+    queries.push(`${opts.name} high school graduation year`);
+    queries.push(`${opts.name} college application`);
+  }
+
+  // If the email domain looks like a school, research it directly
+  if (domain && !isPersonalDomain && (domain.endsWith(".edu") || domain.includes("k12") || domain.includes("school"))) {
+    queries.push(`${domain} school about`);
   }
 
   const allResults: TavilyResult[] = [];
@@ -131,7 +111,7 @@ export async function researchContact(opts: {
       modelId: MODELS.SONNET_4_6,
       system: [
         {
-          text: `You are an elite sales intelligence analyst for a consulting business. Build a comprehensive customer persona from web research and email context. Your output helps the business owner know exactly how to approach, engage, and convert this person into a paying client.
+          text: `You are an elite sales intelligence analyst for a college admissions consulting business. Build a comprehensive customer persona from web research and email context. Your output helps the business owner know exactly how to approach, engage, and convert this person into a paying client.
 
 Structure your analysis as:
 
@@ -141,10 +121,19 @@ Structure your analysis as:
 - Role, background, education, career highlights
 - Location, age range if determinable
 - Social media presence / public visibility
+- **Parent vs. student**: Is this a parent reaching out on behalf of their child, or the student themselves?
+- **Student grade level / graduation year**: If determinable from context or research (e.g., "Class of 2026", "rising senior", "junior")
+
+### Education Context
+- Which colleges or universities have been mentioned or are likely targets based on profile
+- Current school (high school or college) if determinable
+- Academic interests or extracurricular signals
+- **Urgency timeline**: Is this a senior applying now, a junior starting to plan, or earlier stage?
+- **Financial context clues**: Private school background, zip code / region, profession of parents — signals price sensitivity
 
 ### What They Care About
 - Personal interests, values, goals
-- Pain points and anxieties (especially related to our services)
+- Pain points and anxieties (especially around college admissions)
 - Decision-making style (analytical, emotional, delegator, etc.)
 
 ### How to Sell to Them
@@ -162,6 +151,9 @@ Structure your analysis as:
 - Likelihood to convert (high/medium/low)
 - Potential deal value
 - Red flags to watch for
+
+### Outreach Angle
+Write 1-2 sentences that would be a compelling, specific opener for a first outreach or reply to this person. Make it personal — reference something specific from their background. This should NOT be generic. It should feel like you did your homework.
 
 Be specific. Use real details from the research. If limited info is found, note it and work with what's available from the email context.`,
         },

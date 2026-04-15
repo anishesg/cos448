@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Users,
@@ -13,6 +12,7 @@ import {
   Upload,
   ChevronRight,
 } from "lucide-react";
+import { ContactPanel } from "./contact-panel";
 
 interface Contact {
   id: string;
@@ -41,12 +41,12 @@ type SortField = "name" | "lastContact" | "fitScore" | "interactions";
 type SortDir = "asc" | "desc";
 
 export default function V3PeoplePage() {
-  const router = useRouter();
   const { data, isLoading, isError } = useContacts();
   const [sortField, setSortField] = useState<SortField>("lastContact");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
 
   const cycleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -156,7 +156,7 @@ export default function V3PeoplePage() {
               <tr
                 key={c.id}
                 style={{ cursor: "pointer" }}
-                onClick={() => router.push(`/v3/threads?contact=${c.id}`)}
+                onClick={() => setSelectedContactId(c.id)}
               >
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -195,6 +195,11 @@ export default function V3PeoplePage() {
           </tbody>
         </table>
       )}
+
+      <ContactPanel
+        contactId={selectedContactId}
+        onClose={() => setSelectedContactId(null)}
+      />
     </div>
   );
 }

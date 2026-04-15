@@ -86,13 +86,13 @@ export default function V3DealsPage() {
   };
 
   const leads = (data?.leads ?? [])
-    .filter(l => !search || (l.contact.name || l.contact.email).toLowerCase().includes(search.toLowerCase()))
+    .filter(l => !search || (l.name || l.email).toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortField === "stage") return (stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage)) * dir;
-      if (sortField === "revenue") return ((Number(a.contact.revenuePotential) || 0) - (Number(b.contact.revenuePotential) || 0)) * dir;
-      if (sortField === "fitScore") return ((a.contact.fitScore ?? -1) - (b.contact.fitScore ?? -1)) * dir;
-      return (a.contact.name || a.contact.email).localeCompare(b.contact.name || b.contact.email) * dir;
+      if (sortField === "revenue") return ((Number(a.revenuePotential) || 0) - (Number(b.revenuePotential) || 0)) * dir;
+      if (sortField === "fitScore") return ((a.fitScore ?? -1) - (b.fitScore ?? -1)) * dir;
+      return (a.name || a.email).localeCompare(b.name || b.email) * dir;
     });
 
   return (

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Send,
   Calendar,
@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Paperclip,
   HelpCircle,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface MeetingEvent {
@@ -74,13 +76,55 @@ function useSyncEmails() {
   });
 }
 
+function useAiCommand() {
+  return useMutation<{ response: string }, Error, string>({
+    mutationFn: async (query: string) => {
+      const res = await fetch("/api/ai/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "AI request failed");
+      }
+      return res.json();
+    },
+  });
+}
+
 export default function V3HomePage() {
   const router = useRouter();
   const [aiQuery, setAiQuery] = useState("");
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: sessionData } = useSession();
   const { data: meetingsData } = useMeetings();
   const { data: alertsData } = useWatchtowerAlerts();
   const syncMutation = useSyncEmails();
+  const aiMutation = useAiCommand();
+
+  const handleSendAi = async () => {
+    const query = aiQuery.trim();
+    if (!query || aiMutation.isPending) return;
+    setAiResponse(null);
+    setAiError(null);
+    setAiQuery("");
+    try {
+      const result = await aiMutation.mutateAsync(query);
+      setAiResponse(result.response);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSendAi();
+    }
+  };
 
   const today = new Date();
 
@@ -119,23 +163,61 @@ export default function V3HomePage() {
         {/* AI Chat */}
         <div className="v3-ai-chat" style={{ marginBottom: 32 }}>
           <textarea
+            ref={textareaRef}
             value={aiQuery}
             onChange={(e) => setAiQuery(e.target.value)}
-            placeholder="Ask anything..."
+            onKeyDown={handleKeyDown}
+            placeholder="Ask anything... (⌘↵ to send)"
             rows={3}
+            disabled={aiMutation.isPending}
           />
           <div className="v3-ai-chat-footer">
             <span style={{ fontSize: 12, color: "var(--v3-text-ghost)", marginRight: "auto" }}>
               Auto
             </span>
-            <button className="v3-topbar-btn-icon" style={{ width: 24, height: 24 }}>
+            <button className="v3-topbar-btn-icon" style={{ width: 24, height: 24 }} disabled={aiMutation.isPending}>
               <Paperclip size={12} />
             </button>
-            <button className="v3-btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}>
-              <Send size={12} />
-              Send
+            <button
+              className="v3-btn-primary"
+              style={{ padding: "5px 12px", fontSize: 12, opacity: aiMutation.isPending || !aiQuery.trim() ? 0.6 : 1 }}
+              onClick={handleSendAi}
+              disabled={aiMutation.isPending || !aiQuery.trim()}
+            >
+              {aiMutation.isPending ? (
+                <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+              ) : (
+                <Send size={12} />
+              )}
+              {aiMutation.isPending ? "Thinking..." : "Send"}
             </button>
           </div>
+
+          {/* AI response */}
+          {(aiResponse || aiError) && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "14px 16px",
+                borderRadius: "var(--v3-radius-md)",
+                border: `1px solid ${aiError ? "rgba(239,68,68,0.25)" : "var(--v3-border)"}`,
+                background: aiError ? "rgba(239,68,68,0.04)" : "var(--v3-bg-surface)",
+                fontSize: 13,
+                lineHeight: 1.6,
+              }}
+            >
+              {aiError ? (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--v3-accent-red, #ef4444)" }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span>{aiError}</span>
+                </div>
+              ) : (
+                <div style={{ color: "var(--v3-text-primary)", whiteSpace: "pre-wrap" }}>
+                  {aiResponse}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Meetings section */}

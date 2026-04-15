@@ -109,6 +109,42 @@ export async function classifyEmail(opts: {
   businessType?: string;
   businessContext?: string;
 }): Promise<TriageClassification> {
+  const isCollegeAdmissions =
+    opts.businessType?.toLowerCase().includes("college") ||
+    opts.businessType?.toLowerCase().includes("admission") ||
+    opts.businessContext?.toLowerCase().includes("college") ||
+    opts.businessContext?.toLowerCase().includes("admission");
+
+  const collegeAdmissionsContext = isCollegeAdmissions
+    ? `
+## College Admissions Business Context
+
+This is a college admissions consulting business. Apply these domain-specific rules:
+
+Hot lead signals (classify as "lead", urgency "high" or "critical"):
+- Parent of a high school junior or senior actively looking for help
+- A high school student reaching out themselves about applications
+- Any mention of "this fall", "applying soon", "deadline", or current application cycle
+- Mentions of specific colleges they're targeting
+- Asking about essay help, college list, or application strategy
+
+Revenue signals — weight these heavily when setting businessLeverage to "revenue":
+- "private counselor", "independent counselor", "college consultant"
+- "application help", "essay help", "college list", "school list"
+- "how much do you charge", "what are your rates", "packages", "pricing"
+- "my son/daughter is a junior/senior"
+
+Urgency calibration for college admissions:
+- Senior applying THIS fall: urgency = "critical" (application deadlines are immovable)
+- Junior starting to plan: urgency = "high" (12-month runway, still very valuable)
+- Sophomore or earlier: urgency = "medium" (time to nurture)
+- Parent asking general questions without a specific student timeline: urgency = "medium"
+
+agentObjective for leads should be one of: "book_consult", "qualify_student_grade", "send_pricing", "answer_timeline_question"
+
+Do NOT classify college/admissions inquiries as "noise" or "admin" — even vague ones are potential leads.`
+    : "";
+
   const systemPrompt = `You are a business-aware email triage agent for a solo ${opts.businessType ?? "service"} business.
 
 Your job is to classify incoming email threads by their business meaning — not just email mechanics.
@@ -119,7 +155,7 @@ Key principles:
 - Revenue-related threads always get higher priority
 - Scope changes, pricing discussions, and legal matters should be escalated
 - Newsletters, automated notifications, and marketing should be classified as noise
-${opts.businessContext ? `\nBusiness context:\n${opts.businessContext}` : ""}
+${opts.businessContext ? `\nBusiness context:\n${opts.businessContext}` : ""}${collegeAdmissionsContext}
 
 Analyze the email and classify it using the provided tool.`;
 
