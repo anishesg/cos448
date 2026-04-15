@@ -1,0 +1,133 @@
+{
+  "Comment": "Follow-up loop state machine — pursues leads over days/weeks",
+  "StartAt": "WaitForResponse",
+  "States": {
+    "WaitForResponse": {
+      "Type": "Wait",
+      "SecondsPath": "$.waitSeconds",
+      "Next": "CheckForResponse"
+    },
+    "CheckForResponse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${CheckResponseFn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.checkResult",
+      "Next": "EvaluateResponse"
+    },
+    "EvaluateResponse": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkResult.Payload.hasResponse",
+          "BooleanEquals": true,
+          "Next": "ProcessResponse"
+        },
+        {
+          "Variable": "$.checkResult.Payload.shouldEscalate",
+          "BooleanEquals": true,
+          "Next": "Escalate"
+        },
+        {
+          "Variable": "$.checkResult.Payload.maxAttemptsReached",
+          "BooleanEquals": true,
+          "Next": "MarkStale"
+        }
+      ],
+      "Default": "GenerateNudge"
+    },
+    "ProcessResponse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ProcessResponseFn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.processResult",
+      "Next": "DetermineNextStep"
+    },
+    "DetermineNextStep": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.processResult.Payload.stage",
+          "StringEquals": "scheduling",
+          "Next": "ProposeTimes"
+        },
+        {
+          "Variable": "$.processResult.Payload.stage",
+          "StringEquals": "objection",
+          "Next": "Escalate"
+        },
+        {
+          "Variable": "$.processResult.Payload.stage",
+          "StringEquals": "meeting_booked",
+          "Next": "GeneratePrepBrief"
+        }
+      ],
+      "Default": "WaitForResponse"
+    },
+    "GenerateNudge": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${GenerateNudgeFn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.nudgeResult",
+      "Next": "IncrementAttempt"
+    },
+    "IncrementAttempt": {
+      "Type": "Pass",
+      "Parameters": {
+        "workflowId.$": "$.workflowId",
+        "userId.$": "$.userId",
+        "threadId.$": "$.threadId",
+        "attemptCount.$": "States.MathAdd($.attemptCount, 1)",
+        "maxAttempts.$": "$.maxAttempts",
+        "cadenceHours.$": "$.cadenceHours",
+        "waitSeconds.$": "States.MathMultiply($.cadenceHours, 3600)"
+      },
+      "Next": "WaitForResponse"
+    },
+    "ProposeTimes": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ProposeTimesFn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.scheduleResult",
+      "Next": "WaitForResponse"
+    },
+    "Escalate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${EscalateFn}",
+        "Payload.$": "$"
+      },
+      "End": true
+    },
+    "MarkStale": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${MarkStaleFn}",
+        "Payload.$": "$"
+      },
+      "End": true
+    },
+    "GeneratePrepBrief": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${GeneratePrepBriefFn}",
+        "Payload.$": "$"
+      },
+      "End": true
+    }
+  }
+}
