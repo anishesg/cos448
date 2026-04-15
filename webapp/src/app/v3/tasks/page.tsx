@@ -12,6 +12,7 @@ import {
   Calendar,
   User,
   Link as LinkIcon,
+  AlertCircle,
 } from "lucide-react";
 
 interface WatchtowerAlert {
@@ -20,8 +21,22 @@ interface WatchtowerAlert {
   title: string;
   description?: string;
   threadId?: string;
-  contactName?: string;
-  severity?: string;
+  threadSubject?: string | null;
+  urgency?: string;
+  daysSinceLastAction?: number;
+  suggestedAction?: string;
+}
+
+function useSession() {
+  return useQuery<{ user: { name: string | null; email: string } | null }>({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/session");
+      if (!res.ok) return { user: null };
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
 }
 
 function useWatchtowerAlerts() {
@@ -29,7 +44,7 @@ function useWatchtowerAlerts() {
     queryKey: ["watchtower"],
     queryFn: async () => {
       const res = await fetch("/api/watchtower");
-      if (!res.ok) return { alerts: [] };
+      if (!res.ok) throw new Error("Failed to load tasks");
       return res.json();
     },
   });
@@ -41,10 +56,30 @@ interface CreateTaskModalProps {
 
 function CreateTaskModal({ onClose }: CreateTaskModalProps) {
   const [title, setTitle] = useState("");
+  const [createMore, setCreateMore] = useState(false);
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    if (createMore) {
+      setTitle("");
+    } else {
+      onClose();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === "Escape") {
+      onClose();
+    }
+  };
 
   return (
     <div className="v3-modal-overlay" onClick={onClose}>
-      <div className="v3-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+      <div className="v3-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <div className="v3-modal-header">
           <div className="v3-modal-title">
             <CheckSquare size={16} />
@@ -79,12 +114,19 @@ function CreateTaskModal({ onClose }: CreateTaskModalProps) {
           </div>
         </div>
         <div className="v3-modal-footer">
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--v3-text-tertiary)", marginRight: "auto" }}>
-            <div className="v3-toggle" />
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--v3-text-tertiary)", marginRight: "auto", cursor: "pointer" }}
+            onClick={() => setCreateMore(!createMore)}
+          >
+            <div className={`v3-toggle ${createMore ? "on" : ""}`} />
             Create more
           </label>
-          <button className="v3-btn-secondary" onClick={onClose}>Cancel <kbd style={{ fontSize: 10, opacity: 0.5, marginLeft: 4 }}>ESC</kbd></button>
-          <button className="v3-btn-primary">Save <kbd style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>⌘↵</kbd></button>
+          <button className="v3-btn-secondary" onClick={onClose}>
+            Cancel <kbd style={{ fontSize: 10, opacity: 0.5, marginLeft: 4 }}>ESC</kbd>
+          </button>
+          <button className="v3-btn-primary" onClick={handleSave} disabled={!title.trim()}>
+            Save <kbd style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>⌘↵</kbd>
+          </button>
         </div>
       </div>
     </div>
@@ -93,10 +135,13 @@ function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
 export default function V3TasksPage() {
   const router = useRouter();
-  const { data, isLoading } = useWatchtowerAlerts();
+  const { data, isLoading, isError } = useWatchtowerAlerts();
+  const { data: sessionData } = useSession();
   const [showCreate, setShowCreate] = useState(false);
 
   const alerts = data?.alerts ?? [];
+  const userName = sessionData?.user?.name || "You";
+  const userInitial = userName[0].toUpperCase();
 
   return (
     <div>
@@ -108,10 +153,6 @@ export default function V3TasksPage() {
           </span>
         </div>
         <div className="v3-page-header-right">
-          <button className="v3-topbar-btn-ghost" style={{ fontSize: 12, color: "var(--v3-text-tertiary)" }}>
-            Help
-          </button>
-          <span style={{ fontSize: 12, color: "var(--v3-text-tertiary)" }}>Ask Attio</span>
           <button className="v3-btn-primary" onClick={() => setShowCreate(true)}>
             <Plus size={14} />
             New task
@@ -138,6 +179,12 @@ export default function V3TasksPage() {
       {isLoading ? (
         <div style={{ padding: 24, textAlign: "center", color: "var(--v3-text-tertiary)" }}>
           Loading...
+        </div>
+      ) : isError ? (
+        <div className="v3-empty-state">
+          <AlertCircle size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+          <h3>Failed to load tasks</h3>
+          <p>Something went wrong. Please try refreshing the page.</p>
         </div>
       ) : alerts.length === 0 ? (
         <div className="v3-empty-state">
@@ -192,20 +239,22 @@ export default function V3TasksPage() {
                   </td>
                   <td style={{ color: "var(--v3-text-primary)" }}>{alert.title}</td>
                   <td>
-                    <span style={{ color: "var(--v3-accent-amber)", fontSize: 12 }}>Due today</span>
+                    <span style={{ color: alert.urgency === "high" ? "var(--v3-accent-red, #ef4444)" : "var(--v3-accent-amber)", fontSize: 12 }}>
+                      {alert.urgency === "high" ? "Urgent" : (alert.daysSinceLastAction ?? 0) > 0 ? `${alert.daysSinceLastAction}d overdue` : "Due today"}
+                    </span>
                   </td>
                   <td>
-                    {alert.contactName && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="v3-record-dot people" />
-                        {alert.contactName}
+                    {alert.threadSubject && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--v3-text-tertiary)" }}>
+                        <span className="v3-record-dot emails" />
+                        {alert.threadSubject}
                       </span>
                     )}
                   </td>
                   <td>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div className="v3-avatar v3-avatar-sm">A</div>
-                      Anish Kataria
+                      <div className="v3-avatar v3-avatar-sm">{userInitial}</div>
+                      {userName}
                     </span>
                   </td>
                 </tr>

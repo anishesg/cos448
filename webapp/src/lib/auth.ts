@@ -9,14 +9,19 @@ export interface SessionData {
   avatarUrl: string | null;
 }
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret && process.env.NODE_ENV === "production") {
+  throw new Error("SESSION_SECRET environment variable is required in production");
+}
+
 const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET!,
+  password: sessionSecret || "dev-secret-must-be-at-least-32-characters-long!!",
   cookieName: "clientops_session",
   cookieOptions: {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     sameSite: "lax" as const,
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
   },
 };
 
@@ -39,5 +44,18 @@ export async function getCurrentUser(): Promise<SessionData | null> {
 export async function requireUser(): Promise<SessionData> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+export class AuthError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "AuthError";
+  }
+}
+
+export async function requireApiUser(): Promise<SessionData> {
+  const user = await getCurrentUser();
+  if (!user) throw new AuthError();
   return user;
 }

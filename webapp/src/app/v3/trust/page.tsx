@@ -11,20 +11,21 @@ interface TrustRule {
 }
 
 const autonomyLevels = [
-  { value: "full_auto", label: "Full Auto", description: "AI handles completely" },
-  { value: "auto_with_notify", label: "Auto + Notify", description: "AI handles, notifies you" },
-  { value: "draft_for_review", label: "Draft for Review", description: "AI drafts, you approve" },
-  { value: "suggest_only", label: "Suggest Only", description: "AI suggests, you execute" },
-  { value: "manual", label: "Manual", description: "You handle everything" },
+  { value: "auto_act", label: "Full Auto", description: "AI handles completely" },
+  { value: "auto_send", label: "Auto Send", description: "AI sends without review" },
+  { value: "draft_only", label: "Draft for Review", description: "AI drafts, you approve" },
+  { value: "ask_every_time", label: "Ask Every Time", description: "AI asks before acting" },
+  { value: "observe", label: "Observe Only", description: "AI watches, never acts" },
 ];
 
 const categoryLabels: Record<string, string> = {
   scheduling: "Scheduling",
   follow_up: "Follow-ups",
-  lead_response: "Lead Responses",
-  client_communication: "Client Communication",
-  payment_discussion: "Payment Discussion",
-  admin: "Admin Tasks",
+  lead_reply: "Lead Responses",
+  client_reply: "Client Communication",
+  payment: "Payment Discussion",
+  legal: "Legal Matters",
+  browser: "Browser Automation",
 };
 
 function useTrustRules() {
@@ -42,13 +43,16 @@ function useUpdateRules() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rules: TrustRule[]) => {
-      const res = await fetch("/api/trust", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rules }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
+      await Promise.all(
+        rules.map((rule) =>
+          fetch("/api/trust", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: rule.category, autonomyLevel: rule.autonomyLevel }),
+          })
+        )
+      );
+      return { success: true };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["trust"] }),
   });

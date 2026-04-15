@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus,
   FileText,
@@ -9,8 +9,7 @@ import {
   Settings,
   ArrowUpDown,
   X,
-  Building2,
-  Calendar,
+  Trash2,
 } from "lucide-react";
 
 interface Note {
@@ -21,11 +20,51 @@ interface Note {
   content?: string;
 }
 
-function NoteEditor({ note, onClose }: { note: Note | null; onClose: () => void }) {
-  const [title, setTitle] = useState(note?.title || "Untitled note");
+const STORAGE_KEY = "clientops_notes";
+
+function loadNotes(): Note[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveNotes(notes: Note[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+}
+
+function NoteEditor({
+  note,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  note: Note;
+  onSave: (updated: Note) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(note.title);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current && note.content) {
+      contentRef.current.textContent = note.content;
+    }
+  }, [note.id]);
+
+  const handleClose = useCallback(() => {
+    const content = contentRef.current?.textContent ?? "";
+    onSave({ ...note, title: title || "Untitled note", content });
+    onClose();
+  }, [note, title, onSave, onClose]);
 
   return (
-    <div className="v3-modal-overlay" onClick={onClose}>
+    <div className="v3-modal-overlay" onClick={handleClose}>
       <div
         className="v3-modal"
         style={{ maxWidth: 640, maxHeight: "80vh", display: "flex", flexDirection: "column" }}
@@ -33,17 +72,19 @@ function NoteEditor({ note, onClose }: { note: Note | null; onClose: () => void 
       >
         <div className="v3-modal-header">
           <div className="v3-modal-title">
-            <Building2 size={14} style={{ color: "var(--v3-accent-blue)" }} />
-            {note?.linkedRecord || "New Note"}
+            <FileText size={14} style={{ color: "var(--v3-accent-blue)" }} />
+            {title || "New Note"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button className="v3-topbar-btn-icon" title="Minimize" style={{ width: 24, height: 24 }}>
-              <span style={{ fontSize: 16, lineHeight: 1 }}>−</span>
+            <button
+              className="v3-topbar-btn-icon"
+              title="Delete"
+              onClick={() => { onDelete(note.id); onClose(); }}
+              style={{ width: 24, height: 24 }}
+            >
+              <Trash2 size={12} />
             </button>
-            <button className="v3-topbar-btn-icon" title="Expand" style={{ width: 24, height: 24 }}>
-              <span style={{ fontSize: 12 }}>⤢</span>
-            </button>
-            <button className="v3-topbar-btn-icon" onClick={onClose} style={{ width: 24, height: 24 }}>
+            <button className="v3-topbar-btn-icon" onClick={handleClose} style={{ width: 24, height: 24 }}>
               <X size={14} />
             </button>
           </div>
@@ -60,22 +101,14 @@ function NoteEditor({ note, onClose }: { note: Note | null; onClose: () => void 
               fontWeight: 600,
               width: "100%",
               outline: "none",
-              marginBottom: 12,
+              marginBottom: 16,
             }}
             placeholder="Untitled note"
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <button className="v3-toolbar-btn">
-              <Building2 size={12} />
-              {note?.linkedRecord || "Link a record"}
-            </button>
-            <button className="v3-toolbar-btn">
-              <Calendar size={12} />
-              Link a meeting
-            </button>
-          </div>
           <div
+            ref={contentRef}
             contentEditable
+            suppressContentEditableWarning
             style={{
               minHeight: 200,
               outline: "none",
@@ -83,7 +116,7 @@ function NoteEditor({ note, onClose }: { note: Note | null; onClose: () => void 
               fontSize: 14,
               lineHeight: 1.7,
             }}
-            data-placeholder="Start typing, or create a template"
+            data-placeholder="Start typing..."
           />
         </div>
       </div>
@@ -97,11 +130,40 @@ export default function V3NotesPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
+  useEffect(() => {
+    setNotes(loadNotes());
+  }, []);
+
+  const persistNotes = useCallback((updated: Note[]) => {
+    setNotes(updated);
+    saveNotes(updated);
+  }, []);
+
+  const handleSaveNote = useCallback((updated: Note) => {
+    setNotes((prev) => {
+      const exists = prev.find((n) => n.id === updated.id);
+      const next = exists
+        ? prev.map((n) => (n.id === updated.id ? updated : n))
+        : [updated, ...prev];
+      saveNotes(next);
+      return next;
+    });
+  }, []);
+
+  const handleDeleteNote = useCallback((id: string) => {
+    setNotes((prev) => {
+      const next = prev.filter((n) => n.id !== id);
+      saveNotes(next);
+      return next;
+    });
+  }, []);
+
   const handleNewNote = () => {
     const newNote: Note = {
       id: Date.now().toString(),
       title: "Untitled note",
       createdAt: new Date().toISOString(),
+      content: "",
     };
     setEditingNote(newNote);
     setShowEditor(true);
@@ -223,15 +285,12 @@ export default function V3NotesPage() {
         </div>
       )}
 
-      {showEditor && (
+      {showEditor && editingNote && (
         <NoteEditor
           note={editingNote}
-          onClose={() => {
-            setShowEditor(false);
-            if (editingNote && !notes.find((n) => n.id === editingNote.id)) {
-              setNotes([editingNote, ...notes]);
-            }
-          }}
+          onSave={handleSaveNote}
+          onDelete={handleDeleteNote}
+          onClose={() => setShowEditor(false)}
         />
       )}
     </div>

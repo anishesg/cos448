@@ -2,12 +2,19 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { BookOpen, Sun, Moon, Loader2, Plus, Clock } from "lucide-react";
+import { BookOpen, Sun, Moon, Clock } from "lucide-react";
+
+interface BriefingStats {
+  actionsHandled?: number;
+  pendingApprovals?: number;
+  activeWorkflows?: number;
+  needsAttention?: number;
+}
 
 interface Briefing {
   id: string;
   type: string;
-  content: Record<string, unknown>;
+  content: { markdown?: string; stats?: BriefingStats } | string;
   generatedAt: string;
 }
 
@@ -101,8 +108,29 @@ export default function V3BriefingPage() {
                     {new Date(b.generatedAt).toLocaleString()}
                   </span>
                 </div>
+                {(() => {
+                  const stats = typeof b.content === "object" ? (b.content as { stats?: BriefingStats }).stats : undefined;
+                  return stats && Object.keys(stats).length > 0 ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                      {stats.actionsHandled != null && (
+                        <span className="v3-badge v3-badge-green">{stats.actionsHandled} handled</span>
+                      )}
+                      {stats.pendingApprovals != null && (
+                        <span className="v3-badge v3-badge-amber">{stats.pendingApprovals} pending</span>
+                      )}
+                      {stats.activeWorkflows != null && (
+                        <span className="v3-badge v3-badge-blue">{stats.activeWorkflows} workflows</span>
+                      )}
+                      {stats.needsAttention != null && (
+                        <span className="v3-badge v3-badge-red">{stats.needsAttention} need attention</span>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
                 <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--v3-text-secondary)", whiteSpace: "pre-wrap" }}>
-                  {typeof b.content === "string" ? b.content : JSON.stringify(b.content, null, 2)}
+                  {typeof b.content === "string"
+                    ? b.content
+                    : (b.content as { markdown?: string })?.markdown ?? JSON.stringify(b.content, null, 2)}
                 </div>
               </div>
             ))}

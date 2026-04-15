@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -10,7 +11,8 @@ import {
 import { eq, and } from "drizzle-orm";
 import { getAuthedGmailClient } from "@/lib/google";
 import { generateDraft } from "@/lib/agents/draft-agent";
-import { extractWritingStyle } from "@/lib/agents/tone-extractor";
+import { enqueueTurn } from "@/lib/test/sim-scheduler";
+import { runSimulateRespondTurn } from "@/lib/test/simulate-respond-turn";
 
 export const maxDuration = 60;
 
@@ -140,7 +142,26 @@ NEVER use: ${writingStyle.avoidances?.join(", ")}`
     .where(eq(emailThreads.id, threadId));
 
   if (thread.isTestSimulation) {
-    triggerCustomerReply(threadId, session.userId).catch(console.error);
+    const capturedThreadId = threadId;
+    const capturedUserId = session.userId;
+
+    // Prefer SQS (production); fall back to after() for local dev
+    enqueueTurn(capturedThreadId, capturedUserId, 20)
+      .then((enqueued) => {
+        if (!enqueued) {
+          // Local dev: use after() to run after the response is sent
+          after(async () => {
+            const delay = 15000 + Math.random() * 15000;
+            await new Promise((r) => setTimeout(r, delay));
+            try {
+              await runSimulateRespondTurn(capturedThreadId, capturedUserId);
+            } catch (err) {
+              console.error("[Automate] Customer reply simulation failed:", err);
+            }
+          });
+        }
+      })
+      .catch(console.error);
   }
 
   return NextResponse.json({
@@ -171,14 +192,3 @@ export async function DELETE(
   return NextResponse.json({ success: true, automationStatus: "paused" });
 }
 
-async function triggerCustomerReply(threadId: string, userId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const delay = 15000 + Math.random() * 15000;
-  await new Promise((r) => setTimeout(r, delay));
-
-  await fetch(`${baseUrl}/api/test/simulate/respond`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ threadId, userId }),
-  });
-}

@@ -36,7 +36,7 @@ function useBrowserTasks() {
 function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { objective: string; targetUrl?: string }) => {
+    mutationFn: async (data: { objective: string; targetUrl: string }) => {
       const res = await fetch("/api/browser", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -192,8 +192,19 @@ export default function V3OperatorPage() {
                 <input className="v3-input" value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="What should the browser do?" />
               </div>
               <div>
-                <label style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginBottom: 4, display: "block" }}>Target URL (optional)</label>
-                <input className="v3-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
+                <label style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginBottom: 4, display: "block" }}>
+                  Target URL <span style={{ color: "var(--v3-accent-red)" }}>*</span>
+                </label>
+                <input
+                  className="v3-input"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://..."
+                  style={{ borderColor: url && !url.startsWith("http") ? "var(--v3-accent-red)" : undefined }}
+                />
+                {url && !url.startsWith("http") && (
+                  <p style={{ fontSize: 11, color: "var(--v3-accent-red)", marginTop: 4 }}>URL must start with https://</p>
+                )}
               </div>
             </div>
             <div className="v3-modal-footer">
@@ -201,12 +212,13 @@ export default function V3OperatorPage() {
               <button
                 className="v3-btn-primary"
                 onClick={() => {
-                  createMutation.mutate({ objective, targetUrl: url || undefined });
+                  if (!url.startsWith("http")) return;
+                  createMutation.mutate({ objective, targetUrl: url });
                   setShowCreate(false);
                   setObjective("");
                   setUrl("");
                 }}
-                disabled={!objective}
+                disabled={!objective || !url || !url.startsWith("http")}
               >
                 Create
               </button>

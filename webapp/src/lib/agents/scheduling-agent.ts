@@ -219,7 +219,7 @@ export async function addBlockerEvents(userId: string) {
       durationHours: 1.5,
     },
     {
-      summary: "Hack the CIA mainframe",
+      summary: "Reserved focus block (placeholder)",
       dayOffset: 0,
       startHour: 14,
       durationHours: 2,

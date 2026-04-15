@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import {
   emailThreads,
@@ -17,11 +17,25 @@ import {
   getHeader as getHeaderUtil,
   parseSender,
 } from "@/lib/gmail-parser";
+import { runSimulateRespondTurn } from "@/lib/test/simulate-respond-turn";
 
 export const maxDuration = 60;
 
+function parseBearerToken(authHeader: string | null): string | null {
+  if (!authHeader?.trim()) return null;
+  const match = /^Bearer\s+(\S+)/i.exec(authHeader.trim());
+  const token = match?.[1]?.trim();
+  return token && token.length > 0 ? token : null;
+}
+
 export async function POST(request: NextRequest) {
   try {
+    if (!request.headers.get("authorization")) {
+      console.warn(
+        "Gmail webhook: missing Authorization header (Pub/Sub sends an OIDC Bearer token here when the push subscription enables authentication)."
+      );
+    }
+
     const body = await request.json();
     const message = body.message;
 
@@ -41,11 +55,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const bearerToken = parseBearerToken(request.headers.get("authorization"));
+
     const [user] = await db
       .select()
       .from(userProfiles)
       .where(eq(userProfiles.email, emailAddress))
       .limit(1);
+
+    if (!bearerToken && !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!user) {
       return NextResponse.json({ status: "user_not_found" });
@@ -347,18 +367,14 @@ NEVER use: ${writingStyle.avoidances?.join(", ")}`
     .where(eq(emailThreads.id, dbThread.id));
 
   if (dbThread.isTestSimulation && turns < maxTurns) {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const delay = 15000 + Math.random() * 15000;
-    setTimeout(async () => {
+    const delayMs = 15000 + Math.random() * 15000;
+    after(async () => {
+      await new Promise((r) => setTimeout(r, delayMs));
       try {
-        await fetch(`${baseUrl}/api/test/simulate/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ threadId: dbThread.id, userId: user.id }),
-        });
+        await runSimulateRespondTurn(dbThread.id, user.id);
       } catch (err) {
         console.error("Customer simulation trigger failed:", err);
       }
-    }, delay);
+    });
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { emailThreads, followUpWorkflows } from "@/lib/db/schema";
 import { eq, and, lt, ne, or } from "drizzle-orm";
@@ -36,7 +36,8 @@ function formatAge(hours: number): string {
 }
 
 export async function GET() {
-  const user = await requireUser();
+  try {
+    const user = await requireApiUser();
   const alerts: WatchtowerAlert[] = [];
   const now = new Date();
 
@@ -249,4 +250,11 @@ export async function GET() {
   };
 
   return NextResponse.json({ alerts: deduped, summary });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Watchtower error:", error);
+    return NextResponse.json({ error: "Failed to fetch alerts" }, { status: 500 });
+  }
 }

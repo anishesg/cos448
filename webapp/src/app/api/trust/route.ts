@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { trustRules } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -15,64 +15,86 @@ const DEFAULT_TRUST_RULES = [
 ];
 
 export async function GET() {
-  const user = await requireUser();
+  try {
+    const user = await requireApiUser();
 
-  let rules = await db
-    .select()
-    .from(trustRules)
-    .where(eq(trustRules.userId, user.userId));
-
-  // Seed defaults if none exist
-  if (rules.length === 0) {
-    for (const rule of DEFAULT_TRUST_RULES) {
-      await db.insert(trustRules).values({
-        userId: user.userId,
-        ...rule,
-      });
-    }
-    rules = await db
+    let rules = await db
       .select()
       .from(trustRules)
       .where(eq(trustRules.userId, user.userId));
-  }
 
-  return NextResponse.json({ rules });
+    // Seed defaults if none exist
+    if (rules.length === 0) {
+      for (const rule of DEFAULT_TRUST_RULES) {
+        await db.insert(trustRules).values({
+          userId: user.userId,
+          ...rule,
+        });
+      }
+      rules = await db
+        .select()
+        .from(trustRules)
+        .where(eq(trustRules.userId, user.userId));
+    }
+
+    return NextResponse.json({ rules });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Trust GET error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PUT(request: NextRequest) {
-  const user = await requireUser();
-  const { category, autonomyLevel, conditions } = await request.json();
+  try {
+    const user = await requireApiUser();
+    const { category, autonomyLevel, conditions } = await request.json();
 
-  if (!category || !autonomyLevel) {
+    if (!category || !autonomyLevel) {
+      return NextResponse.json(
+        { error: "category and autonomyLevel required" },
+        { status: 400 }
+      );
+    }
+
+    // Upsert
+    const existing = await db
+      .select()
+      .from(trustRules)
+      .where(
+        eq(trustRules.userId, user.userId)
+      );
+
+    const existingRule = existing.find((r) => r.category === category);
+
+    if (existingRule) {
+      await db
+        .update(trustRules)
+        .set({ autonomyLevel, conditions: conditions ?? null, updatedAt: new Date() })
+        .where(eq(trustRules.id, existingRule.id));
+    } else {
+      await db.insert(trustRules).values({
+        userId: user.userId,
+        category,
+        autonomyLevel,
+        conditions: conditions ?? null,
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Trust PUT error:", e);
     return NextResponse.json(
-      { error: "category and autonomyLevel required" },
-      { status: 400 }
+      { error: "Internal server error" },
+      { status: 500 }
     );
   }
-
-  // Upsert
-  const existing = await db
-    .select()
-    .from(trustRules)
-    .where(
-      eq(trustRules.userId, user.userId)
-    );
-
-  const existingRule = existing.find((r) => r.category === category);
-
-  if (existingRule) {
-    await db
-      .update(trustRules)
-      .set({ autonomyLevel, conditions: conditions ?? null, updatedAt: new Date() })
-      .where(eq(trustRules.id, existingRule.id));
-  } else {
-    await db.insert(trustRules).values({
-      userId: user.userId,
-      category,
-      autonomyLevel,
-      conditions: conditions ?? null,
-    });
-  }
-
-  return NextResponse.json({ success: true });
 }

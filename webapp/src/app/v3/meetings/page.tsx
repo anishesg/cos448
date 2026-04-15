@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Calendar, Sparkles, Clock, Users, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Sparkles, Clock, Users, ChevronDown, ChevronUp } from "lucide-react";
 
 interface MeetingEvent {
   id: string;
@@ -27,11 +27,16 @@ function useMeetings() {
 function useGenerateBrief() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (eventId: string) => {
+    mutationFn: async (event: MeetingEvent) => {
       const res = await fetch("/api/meetings/briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarEventId: eventId }),
+        body: JSON.stringify({
+          eventId: event.id,
+          eventTitle: event.summary,
+          eventTime: event.start.dateTime,
+          attendees: event.attendees?.map((a) => a.email) ?? [],
+        }),
       });
       if (!res.ok) throw new Error("Failed");
       return res.json();
@@ -41,9 +46,10 @@ function useGenerateBrief() {
 }
 
 export default function V3MeetingsPage() {
-  const { data, isLoading } = useMeetings();
+  const { data, isLoading, isError } = useMeetings();
   const generateBrief = useGenerateBrief();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [briefingId, setBriefingId] = useState<string | null>(null);
   const events = data?.events ?? [];
 
   return (
@@ -61,6 +67,12 @@ export default function V3MeetingsPage() {
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px" }}>
         {isLoading ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--v3-text-tertiary)" }}>Loading...</div>
+        ) : isError ? (
+          <div className="v3-empty-state">
+            <Calendar size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+            <h3>Failed to load meetings</h3>
+            <p>Something went wrong. Please try refreshing.</p>
+          </div>
         ) : events.length === 0 ? (
           <div className="v3-empty-state">
             <Calendar size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
@@ -81,7 +93,7 @@ export default function V3MeetingsPage() {
                   }}
                   onClick={() => setExpandedId(expandedId === event.id ? null : event.id)}
                 >
-                  <Calendar size={16} style={{ color: "var(--v3-accent-indigo)", flexShrink: 0 }} />
+                  <Calendar size={16} style={{ color: "var(--v3-accent-blue)", flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{event.summary}</div>
                     <div style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
@@ -101,13 +113,14 @@ export default function V3MeetingsPage() {
                     className="v3-btn-secondary"
                     onClick={(e) => {
                       e.stopPropagation();
-                      generateBrief.mutate(event.id);
+                      setBriefingId(event.id);
+                      generateBrief.mutate(event, { onSettled: () => setBriefingId(null) });
                     }}
-                    disabled={generateBrief.isPending}
+                    disabled={briefingId === event.id}
                     style={{ fontSize: 12 }}
                   >
                     <Sparkles size={12} />
-                    {generateBrief.isPending ? "..." : "Brief"}
+                    {briefingId === event.id ? "Generating…" : "Brief"}
                   </button>
                   {expandedId === event.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </div>
@@ -116,9 +129,8 @@ export default function V3MeetingsPage() {
                   <div style={{ padding: "0 20px 16px", borderTop: "1px solid var(--v3-border)" }}>
                     {event.brief ? (
                       <div style={{ padding: "12px 0", fontSize: 13, lineHeight: 1.7, color: "var(--v3-text-secondary)", whiteSpace: "pre-wrap" }}>
-                        {typeof event.brief.briefContent === "string"
-                          ? event.brief.briefContent
-                          : JSON.stringify(event.brief.briefContent, null, 2)}
+                        {(event.brief.briefContent as { markdown?: string })?.markdown
+                          ?? JSON.stringify(event.brief.briefContent, null, 2)}
                       </div>
                     ) : (
                       <div style={{ padding: "16px 0", textAlign: "center", color: "var(--v3-text-ghost)", fontSize: 13 }}>

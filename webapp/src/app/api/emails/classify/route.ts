@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { emailThreads, userProfiles } from "@/lib/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { emailThreads, emailMessages, userProfiles } from "@/lib/db/schema";
+import { eq, and, isNull, desc } from "drizzle-orm";
 import { classifyEmail } from "@/lib/agents/triage-agent";
 
-/**
- * Classify all unclassified email threads for the current user.
- * Calls Haiku 4.5 via Bedrock for each thread.
- */
 export async function POST() {
-  const session = await requireUser();
+  try {
+    const session = await requireApiUser();
 
   const [user] = await db
     .select()
@@ -34,14 +31,22 @@ export async function POST() {
   }
 
   let classified = 0;
+  let failed = 0;
 
   for (const thread of unclassified) {
     try {
+      const [latestMsg] = await db
+        .select({ senderEmail: emailMessages.senderEmail, senderName: emailMessages.senderName })
+        .from(emailMessages)
+        .where(eq(emailMessages.threadId, thread.id))
+        .orderBy(desc(emailMessages.sentAt))
+        .limit(1);
+
       const result = await classifyEmail({
         subject: thread.subject ?? "(no subject)",
         snippet: thread.snippet ?? "",
-        senderEmail: "",
-        senderName: null,
+        senderEmail: latestMsg?.senderEmail ?? "",
+        senderName: latestMsg?.senderName ?? null,
         messageCount: thread.messageCount ?? 1,
         direction: thread.lastMessageDirection ?? "inbound",
         businessType: user?.businessType ?? undefined,
@@ -64,8 +69,16 @@ export async function POST() {
       classified++;
     } catch (error) {
       console.error(`Failed to classify thread ${thread.id}:`, error);
+      failed++;
     }
   }
 
-  return NextResponse.json({ classified });
+  return NextResponse.json({ classified, failed, total: unclassified.length });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Classification error:", error);
+    return NextResponse.json({ error: "Classification failed" }, { status: 500 });
+  }
 }

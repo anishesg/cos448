@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles,
   CheckCircle,
-  XCircle,
   Loader2,
   ThumbsUp,
   ThumbsDown,
@@ -48,10 +47,11 @@ function useUpdatePreference() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const action = status === "confirmed" ? "confirm" : "reject";
       const res = await fetch("/api/learning", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ preferenceId: id, action }),
       });
       if (!res.ok) throw new Error("Failed");
       return res.json();
@@ -61,7 +61,7 @@ function useUpdatePreference() {
 }
 
 export default function V3LearningPage() {
-  const { data, isLoading } = usePreferences();
+  const { data, isLoading, isError } = usePreferences();
   const analyzeMutation = useAnalyze();
   const updateMutation = useUpdatePreference();
   const preferences = data?.preferences ?? [];
@@ -94,6 +94,12 @@ export default function V3LearningPage() {
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px" }}>
         {isLoading ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--v3-text-tertiary)" }}>Loading...</div>
+        ) : isError ? (
+          <div className="v3-empty-state">
+            <Sparkles size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+            <h3>Failed to load preferences</h3>
+            <p>Something went wrong. Please try refreshing.</p>
+          </div>
         ) : preferences.length === 0 ? (
           <div className="v3-empty-state">
             <Sparkles size={48} style={{ opacity: 0.15, marginBottom: 16 }} />

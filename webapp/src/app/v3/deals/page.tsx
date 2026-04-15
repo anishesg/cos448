@@ -2,26 +2,28 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   Handshake,
   Plus,
   ArrowUpDown,
-  SlidersHorizontal,
   Settings,
   Search,
+  AlertCircle,
+  ChevronRight,
 } from "lucide-react";
 
 interface Lead {
-  contact: {
-    id: string;
-    name: string;
-    email: string;
-    company: string;
-    revenuePotential: string | null;
-    fitScore: number | null;
-  };
+  id: string;
+  name: string | null;
+  email: string;
+  company: string | null;
+  revenuePotential: string | null;
+  fitScore: number | null;
+  relationshipType: string | null;
   stage: string;
-  threads: Array<{ id: string; subject: string }>;
+  recentThreads: Array<{ id: string; subject: string | null; currentState: string | null }>;
+  researchSummary: string | null;
 }
 
 function useLeads() {
@@ -55,10 +57,43 @@ const stageColors: Record<string, string> = {
   closed_lost: "v3-badge-red",
 };
 
+const stageAccents: Record<string, string> = {
+  new_lead: "var(--v3-accent-blue)",
+  engaged: "var(--v3-accent-green)",
+  qualified: "var(--v3-accent-purple)",
+  proposal: "var(--v3-accent-amber)",
+  negotiation: "var(--v3-accent-amber)",
+  closed_won: "var(--v3-accent-green)",
+  closed_lost: "var(--v3-accent-red)",
+};
+
+type SortField = "name" | "stage" | "revenue" | "fitScore";
+type SortDir = "asc" | "desc";
+
+const stageOrder = ["new_lead","engaged","qualified","proposal","negotiation","closed_won","closed_lost"];
+
 export default function V3DealsPage() {
   const router = useRouter();
-  const { data, isLoading } = useLeads();
-  const leads = data?.leads ?? [];
+  const { data, isLoading, isError } = useLeads();
+  const [sortField, setSortField] = useState<SortField>("stage");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const cycleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const leads = (data?.leads ?? [])
+    .filter(l => !search || (l.contact.name || l.contact.email).toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortField === "stage") return (stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage)) * dir;
+      if (sortField === "revenue") return ((Number(a.contact.revenuePotential) || 0) - (Number(b.contact.revenuePotential) || 0)) * dir;
+      if (sortField === "fitScore") return ((a.contact.fitScore ?? -1) - (b.contact.fitScore ?? -1)) * dir;
+      return (a.contact.name || a.contact.email).localeCompare(b.contact.name || b.contact.email) * dir;
+    });
 
   return (
     <div>
@@ -78,27 +113,45 @@ export default function V3DealsPage() {
       </div>
 
       <div className="v3-toolbar">
-        <button className="v3-toolbar-btn active">
+        <button className={`v3-toolbar-btn ${sortField === "stage" ? "active" : ""}`} onClick={() => cycleSort("stage")}>
           <ArrowUpDown size={12} />
-          Sorted by Stage
+          Stage {sortField === "stage" ? (sortDir === "asc" ? "↑" : "↓") : ""}
         </button>
-        <button className="v3-toolbar-btn">
-          <SlidersHorizontal size={12} />
-          Filter
+        <button className={`v3-toolbar-btn ${sortField === "revenue" ? "active" : ""}`} onClick={() => cycleSort("revenue")}>
+          Revenue {sortField === "revenue" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+        </button>
+        <button className={`v3-toolbar-btn ${sortField === "fitScore" ? "active" : ""}`} onClick={() => cycleSort("fitScore")}>
+          Fit Score {sortField === "fitScore" ? (sortDir === "asc" ? "↑" : "↓") : ""}
         </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
-          <button className="v3-topbar-btn-icon">
+          {searchOpen && (
+            <input
+              className="v3-input"
+              placeholder="Search deals…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+              style={{ width: 180, height: 28, fontSize: 12 }}
+            />
+          )}
+          <button className="v3-topbar-btn-icon" onClick={() => { setSearchOpen(o => !o); setSearch(""); }}>
             <Search size={14} />
           </button>
           <button className="v3-toolbar-btn">
             <Settings size={12} />
-            View settings
+            View
           </button>
         </div>
       </div>
 
       {isLoading ? (
         <div style={{ padding: 24, textAlign: "center", color: "var(--v3-text-tertiary)" }}>Loading...</div>
+      ) : isError ? (
+        <div className="v3-empty-state">
+          <AlertCircle size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+          <h3>Failed to load deals</h3>
+          <p>Something went wrong. Please try refreshing.</p>
+        </div>
       ) : leads.length === 0 ? (
         <div className="v3-empty-state">
           <div style={{ width: 80, height: 80, marginBottom: 20, opacity: 0.15 }}>
@@ -117,46 +170,53 @@ export default function V3DealsPage() {
               <th>Revenue Potential</th>
               <th>Fit Score</th>
               <th>Threads</th>
+              <th style={{ width: 32 }} />
             </tr>
           </thead>
           <tbody>
             {leads.map((lead) => (
               <tr
-                key={lead.contact.id}
-                style={{ cursor: "pointer" }}
+                key={lead.id}
+                style={{
+                  cursor: "pointer",
+                  borderLeft: `3px solid ${stageAccents[lead.stage] || "transparent"}`,
+                }}
                 onClick={() =>
-                  lead.threads[0] && router.push(`/v3/threads/${lead.threads[0].id}`)
+                  lead.recentThreads[0] && router.push(`/v3/threads/${lead.recentThreads[0].id}`)
                 }
               >
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div className="v3-avatar v3-avatar-sm" style={{ background: "var(--v3-accent-orange)" }}>
-                      {lead.contact.name?.[0]?.toUpperCase() || "?"}
+                      {(lead.name || lead.email)?.[0]?.toUpperCase() || "?"}
                     </div>
                     <span style={{ fontWeight: 500, color: "var(--v3-text-primary)" }}>
-                      {lead.contact.name || lead.contact.email}
+                      {lead.name || lead.email}
                     </span>
                   </div>
                 </td>
-                <td>{lead.contact.company || "—"}</td>
+                <td>{lead.company || "—"}</td>
                 <td>
                   <span className={`v3-badge ${stageColors[lead.stage] || "v3-badge-default"}`}>
-                    {stageLabels[lead.stage] || lead.stage}
+                    {stageLabels[lead.stage] || lead.stage.replace(/_/g, " ")}
                   </span>
                 </td>
                 <td>
-                  {lead.contact.revenuePotential
-                    ? `$${Number(lead.contact.revenuePotential).toLocaleString()}`
+                  {lead.revenuePotential
+                    ? `$${Number(lead.revenuePotential).toLocaleString()}`
                     : "—"}
                 </td>
                 <td>
-                  {lead.contact.fitScore != null && (
-                    <span className={`v3-badge ${lead.contact.fitScore >= 70 ? "v3-badge-green" : "v3-badge-default"}`}>
-                      {lead.contact.fitScore}
+                  {lead.fitScore != null && (
+                    <span className={`v3-badge ${lead.fitScore >= 70 ? "v3-badge-green" : "v3-badge-default"}`}>
+                      {lead.fitScore}
                     </span>
                   )}
                 </td>
-                <td>{lead.threads.length}</td>
+                <td>{lead.recentThreads.length}</td>
+                <td>
+                  <ChevronRight size={14} className="v3-row-action" />
+                </td>
               </tr>
             ))}
           </tbody>

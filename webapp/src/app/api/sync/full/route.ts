@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { userProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -12,40 +12,52 @@ import {
 export const maxDuration = 120;
 
 export async function POST() {
-  const session = await requireUser();
-
-  const [user] = await db
-    .select()
-    .from(userProfiles)
-    .where(eq(userProfiles.id, session.userId))
-    .limit(1);
-
-  const businessType = user?.businessType ?? undefined;
-  const results: Record<string, unknown> = {};
-
   try {
-    const contactsCreated = await extractContacts(session.userId, businessType);
-    results.contactsCreated = contactsCreated;
-  } catch (err) {
-    console.error("Contact extraction failed:", err);
-    results.contactsError = String(err);
-  }
+    const session = await requireApiUser();
 
-  try {
-    const classified = await autoClassifyThreads(session.userId, businessType);
-    results.classified = classified;
-  } catch (err) {
-    console.error("Classification failed:", err);
-    results.classificationError = String(err);
-  }
+    const [user] = await db
+      .select()
+      .from(userProfiles)
+      .where(eq(userProfiles.id, session.userId))
+      .limit(1);
 
-  try {
-    const style = await extractUserTone(session.userId);
-    results.toneExtracted = !!style;
-  } catch (err) {
-    console.error("Tone extraction failed:", err);
-    results.toneError = String(err);
-  }
+    const businessType = user?.businessType ?? undefined;
+    const results: Record<string, unknown> = {};
+    let hasErrors = false;
 
-  return NextResponse.json({ success: true, results });
+    try {
+      const contactsCreated = await extractContacts(session.userId, businessType);
+      results.contactsCreated = contactsCreated;
+    } catch (err) {
+      console.error("Contact extraction failed:", err);
+      results.contactsError = "Contact extraction failed";
+      hasErrors = true;
+    }
+
+    try {
+      const classified = await autoClassifyThreads(session.userId, businessType);
+      results.classified = classified;
+    } catch (err) {
+      console.error("Classification failed:", err);
+      results.classificationError = "Classification failed";
+      hasErrors = true;
+    }
+
+    try {
+      const style = await extractUserTone(session.userId);
+      results.toneExtracted = !!style;
+    } catch (err) {
+      console.error("Tone extraction failed:", err);
+      results.toneError = "Tone extraction failed";
+      hasErrors = true;
+    }
+
+    return NextResponse.json({ success: !hasErrors, partial: hasErrors, results });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Full sync error:", error);
+    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+  }
 }

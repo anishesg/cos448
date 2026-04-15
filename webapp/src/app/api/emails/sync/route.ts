@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { getAuthedGmailClient } from "@/lib/google";
 import { db } from "@/lib/db";
 import { emailThreads, emailMessages } from "@/lib/db/schema";
@@ -18,9 +18,8 @@ const MAX_PAGES = 4;
 const PAGE_SIZE = 50;
 
 export async function POST() {
-  const user = await requireUser();
-
   try {
+    const user = await requireApiUser();
     const gmail = await getAuthedGmailClient(user.userId);
 
     let allThreadRefs: Array<{ id?: string | null }> = [];
@@ -166,6 +165,9 @@ export async function POST() {
       total: allThreadRefs.length,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Email sync error:", error);
     return NextResponse.json(
       { error: "Failed to sync emails" },

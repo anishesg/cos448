@@ -6,12 +6,10 @@ import {
   Workflow,
   Plus,
   Settings,
-  Zap,
   Clock,
   CheckCircle,
   Play,
   Webhook,
-  MoreHorizontal,
   ChevronRight,
 } from "lucide-react";
 

@@ -10,7 +10,6 @@ import {
   Sparkles,
   ArrowUpDown,
   SlidersHorizontal,
-  Settings,
 } from "lucide-react";
 
 interface EmailThread {
@@ -83,7 +82,7 @@ const categoryLabels: Record<string, string> = {
 
 export default function V3ThreadsPage() {
   const router = useRouter();
-  const { data, isLoading } = useEmailThreads();
+  const { data, isLoading, isError } = useEmailThreads();
   const syncMutation = useSyncEmails();
   const classifyMutation = useClassify();
   const [searchQuery, setSearchQuery] = useState("");
@@ -159,6 +158,12 @@ export default function V3ThreadsPage() {
 
       {isLoading ? (
         <div style={{ padding: 24, textAlign: "center", color: "var(--v3-text-tertiary)" }}>Loading threads...</div>
+      ) : isError ? (
+        <div className="v3-empty-state">
+          <Mail size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+          <h3>Failed to load threads</h3>
+          <p>Something went wrong. Please try refreshing.</p>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="v3-empty-state">
           <Mail size={48} style={{ opacity: 0.15, marginBottom: 16 }} />

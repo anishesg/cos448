@@ -1,83 +1,100 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { getAuthedCalendarClient } from "@/lib/google";
 import { db } from "@/lib/db";
 import {
   meetingBriefs,
   emailThreads,
   contacts,
-  emailMessages,
   userProfiles,
 } from "@/lib/db/schema";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { generateMeetingBrief } from "@/lib/agents/briefing-agent";
 
 export async function GET() {
-  const session = await requireUser();
-
   try {
-    const calendar = await getAuthedCalendarClient(session.userId);
+    const session = await requireApiUser();
 
-    const now = new Date();
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+    try {
+      const calendar = await getAuthedCalendarClient(session.userId);
 
-    const { data } = await calendar.events.list({
-      calendarId: "primary",
-      timeMin: now.toISOString(),
-      timeMax: endOfDay.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime",
-      maxResults: 10,
-    });
+      const now = new Date();
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
 
-    const events =
-      data.items?.map((event) => ({
-        id: event.id ?? "",
-        title: event.summary ?? "Untitled",
-        start: event.start?.dateTime ?? event.start?.date ?? "",
-        end: event.end?.dateTime ?? event.end?.date ?? "",
-        attendees:
-          event.attendees?.map((a) => a.email ?? "").filter(Boolean) ?? [],
-        meetLink: event.hangoutLink ?? null,
-        location: event.location ?? null,
-      })) ?? [];
+      const { data } = await calendar.events.list({
+        calendarId: "primary",
+        timeMin: now.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: 10,
+      });
 
-    // Check for existing briefs
-    const briefs = await db
-      .select()
-      .from(meetingBriefs)
-      .where(eq(meetingBriefs.userId, session.userId));
+      const events =
+        data.items?.map((event) => ({
+          id: event.id ?? "",
+          summary: event.summary ?? "Untitled",
+          start: { dateTime: event.start?.dateTime ?? event.start?.date ?? "" },
+          end: { dateTime: event.end?.dateTime ?? event.end?.date ?? "" },
+          attendees:
+            event.attendees?.map((a) => ({
+              email: a.email ?? "",
+              displayName: a.displayName ?? undefined,
+            })).filter((a) => a.email) ?? [],
+          meetLink: event.hangoutLink ?? null,
+          location: event.location ?? null,
+        })) ?? [];
 
-    const briefMap = new Map(
-      briefs.map((b) => [b.calendarEventId, b.briefContent])
-    );
+      // Check for existing briefs
+      const briefs = await db
+        .select()
+        .from(meetingBriefs)
+        .where(eq(meetingBriefs.userId, session.userId));
 
-    const enrichedEvents = events.map((event) => ({
-      ...event,
-      brief: briefMap.get(event.id) ?? null,
-    }));
+      const briefMap = new Map(
+        briefs.map((b) => [b.calendarEventId, b.briefContent])
+      );
 
-    return NextResponse.json({ events: enrichedEvents });
-  } catch (error) {
-    console.error("Calendar fetch error:", error);
+      const enrichedEvents = events.map((event) => {
+        const briefContent = briefMap.get(event.id);
+        return {
+          ...event,
+          brief: briefContent ? { briefContent } : null,
+        };
+      });
+
+      return NextResponse.json({ events: enrichedEvents });
+    } catch (error) {
+      console.error("Calendar fetch error:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch calendar" },
+        { status: 500 }
+      );
+    }
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Meeting briefs GET error:", e);
     return NextResponse.json(
-      { error: "Failed to fetch calendar" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await requireUser();
-  const { eventId, eventTitle, eventTime, duration, attendees } =
-    await request.json();
+  try {
+    const session = await requireApiUser();
+    const { eventId, eventTitle, eventTime, duration, attendees } =
+      await request.json();
 
-  if (!eventId) {
-    return NextResponse.json({ error: "eventId required" }, { status: 400 });
-  }
+    if (!eventId) {
+      return NextResponse.json({ error: "eventId required" }, { status: 400 });
+    }
 
-  const [user] = await db
+    const [user] = await db
     .select()
     .from(userProfiles)
     .where(eq(userProfiles.id, session.userId))
@@ -141,5 +158,15 @@ export async function POST(request: NextRequest) {
     })
     .onConflictDoNothing();
 
-  return NextResponse.json({ brief });
+    return NextResponse.json({ brief });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Meeting briefs POST error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

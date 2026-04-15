@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   briefings,
@@ -20,30 +20,42 @@ const bedrock = new BedrockRuntimeClient({
 });
 
 export async function GET() {
-  const user = await requireUser();
+  try {
+    const user = await requireApiUser();
 
-  const latest = await db
-    .select()
-    .from(briefings)
-    .where(eq(briefings.userId, user.userId))
-    .orderBy(desc(briefings.generatedAt))
-    .limit(5);
+    const latest = await db
+      .select()
+      .from(briefings)
+      .where(eq(briefings.userId, user.userId))
+      .orderBy(desc(briefings.generatedAt))
+      .limit(5);
 
-  return NextResponse.json({ briefings: latest });
+    return NextResponse.json({ briefings: latest });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Briefings GET error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await requireUser();
-  const { type } = await request.json();
+  try {
+    const session = await requireApiUser();
+    const { type } = await request.json();
 
-  if (!type || !["morning", "evening"].includes(type)) {
-    return NextResponse.json(
-      { error: "type must be 'morning' or 'evening'" },
-      { status: 400 }
-    );
-  }
+    if (!type || !["morning", "evening"].includes(type)) {
+      return NextResponse.json(
+        { error: "type must be 'morning' or 'evening'" },
+        { status: 400 }
+      );
+    }
 
-  const [user] = await db
+    const [user] = await db
     .select()
     .from(userProfiles)
     .where(eq(userProfiles.id, session.userId))
@@ -157,5 +169,15 @@ Be specific. Use thread names and contact names. Keep each section to 2-4 lines.
     })
     .returning();
 
-  return NextResponse.json({ briefing });
+    return NextResponse.json({ briefing });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Briefings POST error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

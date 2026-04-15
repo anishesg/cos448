@@ -16,5 +16,5 @@ export default async function RootPage() {
     .limit(1);
 
   if (!user?.businessType) redirect("/onboarding");
-  redirect("/dashboard");
+  redirect("/v3");
 }

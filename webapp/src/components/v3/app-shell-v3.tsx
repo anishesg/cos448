@@ -9,16 +9,9 @@ import {
   CheckSquare,
   FileText,
   Mail,
-  Phone,
-  BarChart3,
   ChevronRight,
   Play,
   Workflow,
-  Building2,
-  Users,
-  Handshake,
-  User,
-  Boxes,
   Search,
   LayoutGrid,
   Settings,
@@ -31,7 +24,6 @@ import {
   Monitor,
   Brain,
   Sparkles,
-  TestTube,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -118,8 +110,8 @@ function NotificationPanel({ onClose }: NotificationPanelProps) {
         </div>
         <div className="v3-empty-state" style={{ padding: "60px 24px" }}>
           <Bell size={40} style={{ opacity: 0.2, marginBottom: 16 }} />
-          <h3>No requests</h3>
-          <p>Requests from other users will be displayed here.</p>
+          <h3>No notifications</h3>
+          <p>Notifications and requests from your team will appear here.</p>
         </div>
       </div>
     </div>
@@ -154,11 +146,15 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             <ChevronRight size={12} style={{ opacity: 0.4 }} />
           </div>
           <div className="v3-sidebar-actions">
-            <button className="v3-sidebar-action-btn">
-              <LayoutGrid size={14} />
+            <button
+              className="v3-sidebar-action-btn"
+              onClick={() => setShowNotifications(!showNotifications)}
+              title="Notifications"
+            >
+              <Bell size={14} />
             </button>
-            <button className="v3-sidebar-action-btn">
-              <Search size={14} />
+            <button className="v3-sidebar-action-btn" title="App switcher">
+              <LayoutGrid size={14} />
             </button>
           </div>
         </div>
@@ -184,12 +180,6 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             active={pathname === "/v3"}
           />
           <NavItem
-            href="/v3/notifications"
-            icon={<Bell size={16} />}
-            label="Notifications"
-            active={isActive("/v3/notifications")}
-          />
-          <NavItem
             href="/v3/tasks"
             icon={<CheckSquare size={16} />}
             label="Tasks"
@@ -197,51 +187,11 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             active={isActive("/v3/tasks")}
           />
           <NavItem
-            href="/v3/notes"
-            icon={<FileText size={16} />}
-            label="Notes"
-            active={isActive("/v3/notes")}
-          />
-          <NavItem
             href="/v3/emails"
             icon={<Mail size={16} />}
             label="Emails"
             active={isActive("/v3/emails")}
           />
-          <NavItem
-            href="/v3/calls"
-            icon={<Phone size={16} />}
-            label="Calls"
-            active={isActive("/v3/calls")}
-          />
-          <NavItem
-            href="/v3/reports"
-            icon={<BarChart3 size={16} />}
-            label="Reports"
-            active={isActive("/v3/reports")}
-          />
-
-          {/* Automations group */}
-          <NavGroup
-            icon={<Play size={16} />}
-            label="Automations"
-            defaultOpen={
-              isActive("/v3/sequences") || isActive("/v3/workflows")
-            }
-          >
-            <NavItem
-              href="/v3/sequences"
-              icon={<Megaphone size={14} />}
-              label="Sequences"
-              active={isActive("/v3/sequences")}
-            />
-            <NavItem
-              href="/v3/workflows"
-              icon={<Workflow size={14} />}
-              label="Workflows"
-              active={isActive("/v3/workflows")}
-            />
-          </NavGroup>
 
           {/* Records section */}
           <div className="v3-nav-section-label">Records</div>
@@ -264,26 +214,8 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             active={isActive("/v3/deals")}
           />
 
-          {/* AI Tools section */}
-          <div className="v3-nav-section-label">AI Tools</div>
-          <NavItem
-            href="/v3/intelligence"
-            icon={<Brain size={16} />}
-            label="Intelligence"
-            active={isActive("/v3/intelligence")}
-          />
-          <NavItem
-            href="/v3/briefing"
-            icon={<BookOpen size={16} />}
-            label="Briefings"
-            active={isActive("/v3/briefing")}
-          />
-          <NavItem
-            href="/v3/watchtower"
-            icon={<Eye size={16} />}
-            label="Watchtower"
-            active={isActive("/v3/watchtower")}
-          />
+          {/* Communication section */}
+          <div className="v3-nav-section-label">Communication</div>
           <NavItem
             href="/v3/meetings"
             icon={<Calendar size={16} />}
@@ -291,29 +223,94 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             active={isActive("/v3/meetings")}
           />
           <NavItem
-            href="/v3/operator"
-            icon={<Monitor size={16} />}
-            label="Operator"
-            active={isActive("/v3/operator")}
+            href="/v3/notes"
+            icon={<FileText size={16} />}
+            label="Notes"
+            active={isActive("/v3/notes")}
           />
-          <NavItem
-            href="/v3/learning"
-            icon={<Sparkles size={16} />}
-            label="Learning"
-            active={isActive("/v3/learning")}
-          />
-          <NavItem
-            href="/v3/trust"
-            icon={<Shield size={16} />}
-            label="Trust Rules"
-            active={isActive("/v3/trust")}
-          />
-          <NavItem
-            href="/v3/test"
-            icon={<TestTube size={16} />}
-            label="Test Lab"
-            active={isActive("/v3/test")}
-          />
+
+          {/* Automations group */}
+          <div className="v3-nav-section-label">Automate</div>
+          <NavGroup
+            icon={<Play size={16} />}
+            label="Sequences & Flows"
+            defaultOpen={
+              isActive("/v3/sequences") || isActive("/v3/workflows") || isActive("/v3/operator")
+            }
+          >
+            <NavItem
+              href="/v3/sequences"
+              icon={<Megaphone size={14} />}
+              label="Sequences"
+              active={isActive("/v3/sequences")}
+            />
+            <NavItem
+              href="/v3/workflows"
+              icon={<Workflow size={14} />}
+              label="Workflows"
+              active={isActive("/v3/workflows")}
+            />
+            <NavItem
+              href="/v3/operator"
+              icon={<Monitor size={14} />}
+              label="Operator"
+              active={isActive("/v3/operator")}
+            />
+          </NavGroup>
+
+          {/* AI Tools section */}
+          <div className="v3-nav-section-label">AI Tools</div>
+          <NavGroup
+            icon={<Brain size={16} />}
+            label="Intelligence"
+            defaultOpen={
+              isActive("/v3/intelligence") ||
+              isActive("/v3/watchtower") ||
+              isActive("/v3/briefing")
+            }
+          >
+            <NavItem
+              href="/v3/intelligence"
+              icon={<Brain size={14} />}
+              label="Research"
+              active={isActive("/v3/intelligence")}
+            />
+            <NavItem
+              href="/v3/watchtower"
+              icon={<Eye size={14} />}
+              label="Watchtower"
+              active={isActive("/v3/watchtower")}
+            />
+            <NavItem
+              href="/v3/briefing"
+              icon={<BookOpen size={14} />}
+              label="Briefings"
+              active={isActive("/v3/briefing")}
+            />
+          </NavGroup>
+
+          {/* Settings group */}
+          <div className="v3-nav-section-label">Settings</div>
+          <NavGroup
+            icon={<Settings size={16} />}
+            label="Configuration"
+            defaultOpen={
+              isActive("/v3/learning") || isActive("/v3/trust")
+            }
+          >
+            <NavItem
+              href="/v3/learning"
+              icon={<Sparkles size={14} />}
+              label="Learning"
+              active={isActive("/v3/learning")}
+            />
+            <NavItem
+              href="/v3/trust"
+              icon={<Shield size={14} />}
+              label="Trust Rules"
+              active={isActive("/v3/trust")}
+            />
+          </NavGroup>
         </nav>
 
         {/* Footer */}
@@ -323,8 +320,13 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
             <span>Invite team members</span>
           </div>
           <div className="v3-sidebar-trial">
-            <span>14 days left on trial</span>
-            <span style={{ marginLeft: "auto", color: "var(--v3-accent-indigo)", fontWeight: 500, cursor: "pointer" }}>Keep Pro</span>
+            <div className="v3-avatar v3-avatar-sm" style={{ background: "var(--v3-accent-green)", flexShrink: 0 }}>
+              {initial}
+            </div>
+            <span style={{ fontSize: 12, color: "var(--v3-text-tertiary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.name || user.email}
+            </span>
+            <span style={{ marginLeft: "auto", color: "var(--v3-accent-blue)", fontWeight: 500, cursor: "pointer", fontSize: 12, flexShrink: 0 }}>Pro</span>
           </div>
         </div>
       </aside>

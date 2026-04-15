@@ -11,9 +11,9 @@ import {
   MoreHorizontal,
   CheckSquare,
   Plus,
-  Sparkles,
   RefreshCw,
-  Mail,
+  Paperclip,
+  HelpCircle,
 } from "lucide-react";
 
 interface MeetingEvent {
@@ -24,12 +24,16 @@ interface MeetingEvent {
   attendees?: { email: string }[];
 }
 
-interface TaskItem {
-  id: string;
-  title: string;
-  dueDate: string;
-  contactName?: string;
-  assignee?: string;
+function useSession() {
+  return useQuery<{ user: { name: string | null; email: string } | null }>({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/session");
+      if (!res.ok) return { user: null };
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
 }
 
 function useWatchtowerAlerts() {
@@ -58,12 +62,14 @@ function useSyncEmails() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      await fetch("/api/emails/sync", { method: "POST" });
+      const syncRes = await fetch("/api/emails/sync", { method: "POST" });
+      if (!syncRes.ok) throw new Error("Sync failed");
       await fetch("/api/sync/full", { method: "POST" });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["emails"] });
       qc.invalidateQueries({ queryKey: ["watchtower"] });
+      qc.invalidateQueries({ queryKey: ["meetings"] });
     },
   });
 }
@@ -71,21 +77,17 @@ function useSyncEmails() {
 export default function V3HomePage() {
   const router = useRouter();
   const [aiQuery, setAiQuery] = useState("");
+  const { data: sessionData } = useSession();
   const { data: meetingsData } = useMeetings();
   const { data: alertsData } = useWatchtowerAlerts();
   const syncMutation = useSyncEmails();
 
   const today = new Date();
-  const dateStr = today.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
 
   const events = meetingsData?.events ?? [];
   const alerts = alertsData?.alerts ?? [];
 
-  const userName = "Anish";
+  const userName = sessionData?.user?.name?.split(" ")[0] || "there";
 
   const getGreeting = () => {
     const hour = today.getHours();
@@ -99,20 +101,18 @@ export default function V3HomePage() {
       {/* Page header */}
       <div className="v3-page-header">
         <div className="v3-page-header-left">
-          <span className="v3-page-header-title">
-            <span style={{ marginRight: 4, opacity: 0.5 }}>🏠</span> Home
-          </span>
+          <span className="v3-page-header-title">Home</span>
         </div>
         <div className="v3-page-header-right">
           <button className="v3-topbar-btn-icon" title="Help">
-            <span style={{ fontSize: 13, color: "var(--v3-text-tertiary)" }}>?</span>
+            <HelpCircle size={14} />
           </button>
         </div>
       </div>
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "40px 24px" }}>
         {/* Greeting */}
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, letterSpacing: "-0.02em", color: "var(--v3-text-primary)" }}>
           {getGreeting()}, {userName}.
         </h1>
 
@@ -129,19 +129,11 @@ export default function V3HomePage() {
               Auto
             </span>
             <button className="v3-topbar-btn-icon" style={{ width: 24, height: 24 }}>
-              <span style={{ fontSize: 12 }}>📎</span>
+              <Paperclip size={12} />
             </button>
-            <button
-              className="v3-avatar"
-              style={{
-                width: 28,
-                height: 28,
-                background: "var(--v3-accent-indigo)",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
+            <button className="v3-btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}>
               <Send size={12} />
+              Send
             </button>
           </div>
         </div>
@@ -211,21 +203,24 @@ export default function V3HomePage() {
               {events.map((event) => (
                 <div
                   key={event.id}
-                  className="v3-card"
-                  style={{ padding: "12px 16px", cursor: "pointer" }}
+                  className="v3-card v3-card-tint-blue"
+                  style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}
+                  onClick={() => window.location.href = "/v3/meetings"}
                 >
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>{event.summary}</div>
-                  <div style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginTop: 4 }}>
-                    {new Date(event.start.dateTime).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}{" "}
-                    -{" "}
-                    {new Date(event.end.dateTime).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{event.summary}</div>
+                    <div style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginTop: 2 }}>
+                      {new Date(event.start.dateTime).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}{" – "}
+                      {new Date(event.end.dateTime).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </div>
+                  <ChevronRight size={14} style={{ color: "var(--v3-text-ghost)" }} />
                 </div>
               ))}
             </div>
@@ -316,27 +311,6 @@ export default function V3HomePage() {
           )}
         </div>
 
-        {/* Quick actions */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="v3-btn-secondary"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-            >
-              <RefreshCw size={14} className={syncMutation.isPending ? "animate-spin" : ""} />
-              {syncMutation.isPending ? "Syncing..." : "Sync Inbox"}
-            </button>
-            <button className="v3-btn-secondary" onClick={() => router.push("/v3/emails")}>
-              <Mail size={14} />
-              View Emails
-            </button>
-            <button className="v3-btn-secondary" onClick={() => router.push("/v3/intelligence")}>
-              <Sparkles size={14} />
-              Intelligence
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

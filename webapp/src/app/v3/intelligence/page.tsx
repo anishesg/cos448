@@ -37,13 +37,29 @@ function useKnowledge() {
   });
 }
 
+function KnowledgeSkeleton() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {[1, 2, 3].map((i) => (
+        <div key={i} style={{ padding: "12px 16px", borderRadius: "var(--v3-radius-md)", border: "1px solid var(--v3-border)", background: "var(--v3-bg-surface)" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div className="v3-skeleton" style={{ width: "40%", height: 13, borderRadius: 4 }} />
+            <div className="v3-skeleton" style={{ width: 60, height: 20, borderRadius: 4 }} />
+            <div className="v3-skeleton" style={{ width: 60, height: 20, borderRadius: 4, marginLeft: "auto" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function useIntelligenceSearch() {
   return useMutation({
     mutationFn: async ({ query, type }: { query: string; type: string }) => {
       const res = await fetch("/api/intelligence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: type, query }),
+        body: JSON.stringify({ type, query }),
       });
       if (!res.ok) throw new Error("Failed");
       return res.json();
@@ -52,7 +68,7 @@ function useIntelligenceSearch() {
 }
 
 export default function V3IntelligencePage() {
-  const { data, isLoading } = useKnowledge();
+  const { data, isLoading: isKnowledgeLoading } = useKnowledge();
   const searchMutation = useIntelligenceSearch();
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"search" | "research" | "opportunities">("search");
@@ -62,12 +78,12 @@ export default function V3IntelligencePage() {
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    const actionMap = {
+    const typeMap = {
       search: "search",
-      research: "competitor_research",
-      opportunities: "find_opportunities",
+      research: "competitor",
+      opportunities: "opportunity",
     };
-    searchMutation.mutate({ query, type: actionMap[activeTab] });
+    searchMutation.mutate({ query, type: typeMap[activeTab] });
   };
 
   return (
@@ -131,7 +147,7 @@ export default function V3IntelligencePage() {
           {/* Results */}
           {searchMutation.data && (
             <div style={{ marginTop: 16, padding: "16px", borderRadius: "var(--v3-radius-md)", background: "var(--v3-bg-input)", border: "1px solid var(--v3-border)" }}>
-              <pre style={{ fontSize: 13, color: "var(--v3-text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.7, fontFamily: "inherit" }}>
+              <pre style={{ fontSize: 12, color: "var(--v3-text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.6, fontFamily: "inherit", margin: 0 }}>
                 {typeof searchMutation.data === "string"
                   ? searchMutation.data
                   : JSON.stringify(searchMutation.data, null, 2)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Building2,
   Plus,
@@ -8,6 +9,7 @@ import {
   ArrowUpDown,
   SlidersHorizontal,
   Settings,
+  ChevronRight,
 } from "lucide-react";
 
 interface Contact {
@@ -28,9 +30,21 @@ function useContacts() {
   });
 }
 
+type SortField = "name" | "people";
+type SortDir = "asc" | "desc";
+
 export default function V3CompaniesPage() {
-  const { data, isLoading } = useContacts();
+  const { data, isLoading, isError } = useContacts();
   const contacts = data?.contacts ?? [];
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const cycleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
 
   const companies = new Map<string, { name: string; contacts: Contact[] }>();
   for (const c of contacts) {
@@ -41,7 +55,13 @@ export default function V3CompaniesPage() {
     }
     companies.get(companyName)!.contacts.push(c);
   }
-  const companyList = Array.from(companies.values());
+  let companyList = Array.from(companies.values())
+    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortField === "people") return (a.contacts.length - b.contacts.length) * dir;
+      return a.name.localeCompare(b.name) * dir;
+    });
 
   return (
     <div>
@@ -61,27 +81,42 @@ export default function V3CompaniesPage() {
       </div>
 
       <div className="v3-toolbar">
-        <button className="v3-toolbar-btn active">
+        <button className={`v3-toolbar-btn ${sortField === "name" ? "active" : ""}`} onClick={() => cycleSort("name")}>
           <ArrowUpDown size={12} />
-          Sorted by Name
+          Name {sortField === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
         </button>
-        <button className="v3-toolbar-btn">
-          <SlidersHorizontal size={12} />
-          Filter
+        <button className={`v3-toolbar-btn ${sortField === "people" ? "active" : ""}`} onClick={() => cycleSort("people")}>
+          People {sortField === "people" ? (sortDir === "asc" ? "↑" : "↓") : ""}
         </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
-          <button className="v3-topbar-btn-icon">
+          {searchOpen && (
+            <input
+              className="v3-input"
+              placeholder="Search companies…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+              style={{ width: 180, height: 28, fontSize: 12 }}
+            />
+          )}
+          <button className="v3-topbar-btn-icon" onClick={() => { setSearchOpen(o => !o); setSearch(""); }}>
             <Search size={14} />
           </button>
           <button className="v3-toolbar-btn">
             <Settings size={12} />
-            View settings
+            View
           </button>
         </div>
       </div>
 
       {isLoading ? (
         <div style={{ padding: 24, textAlign: "center", color: "var(--v3-text-tertiary)" }}>Loading...</div>
+      ) : isError ? (
+        <div className="v3-empty-state">
+          <Building2 size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+          <h3>Failed to load companies</h3>
+          <p>Something went wrong. Please try refreshing.</p>
+        </div>
       ) : companyList.length === 0 ? (
         <div className="v3-empty-state">
           <div style={{ width: 80, height: 80, marginBottom: 20, opacity: 0.15 }}>
@@ -97,6 +132,7 @@ export default function V3CompaniesPage() {
               <th>Company</th>
               <th>People</th>
               <th>Domain</th>
+              <th style={{ width: 32 }} />
             </tr>
           </thead>
           <tbody>
@@ -108,7 +144,7 @@ export default function V3CompaniesPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div
                         className="v3-avatar v3-avatar-sm"
-                        style={{ background: "var(--v3-accent-blue)", borderRadius: 4 }}
+                        style={{ background: "var(--v3-accent-blue)", borderRadius: "var(--v3-radius-sm)" }}
                       >
                         {company.name[0]?.toUpperCase() || "?"}
                       </div>
@@ -119,6 +155,9 @@ export default function V3CompaniesPage() {
                   </td>
                   <td>{company.contacts.length}</td>
                   <td style={{ fontSize: 12, color: "var(--v3-text-tertiary)" }}>{domain}</td>
+                  <td>
+                    <ChevronRight size={14} className="v3-row-action" />
+                  </td>
                 </tr>
               );
             })}

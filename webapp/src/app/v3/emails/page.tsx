@@ -5,20 +5,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Mail,
-  Plus,
   Send,
   FileText,
   X,
-  Search,
-  RefreshCw,
-  Paperclip,
-  Bold,
-  Italic,
-  Code,
-  Link as LinkIcon,
-  Image,
-  AtSign,
   Trash2,
+  AlertCircle,
+  RefreshCw,
+  ChevronRight,
 } from "lucide-react";
 
 interface EmailThread {
@@ -61,12 +54,42 @@ function useSyncEmails() {
 
 interface ComposeEmailModalProps {
   onClose: () => void;
+  userName: string;
 }
 
-function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
+function ComposeEmailModal({ onClose, userName }: ComposeEmailModalProps) {
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const qc = useQueryClient();
+
+  const handleSend = async () => {
+    if (!to.trim() || !body.trim()) {
+      setError("Recipient and body are required");
+      return;
+    }
+    setError("");
+    setSending(true);
+    try {
+      const res = await fetch("/api/emails/compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: to.trim(), subject: subject.trim(), body: body.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to send");
+      }
+      qc.invalidateQueries({ queryKey: ["emails"] });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send email");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="v3-modal-overlay" onClick={onClose}>
@@ -81,12 +104,6 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
             Compose email
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button className="v3-topbar-btn-icon" style={{ width: 24, height: 24 }}>
-              <span style={{ fontSize: 16, lineHeight: 1 }}>−</span>
-            </button>
-            <button className="v3-topbar-btn-icon" style={{ width: 24, height: 24 }}>
-              <span style={{ fontSize: 12 }}>⤢</span>
-            </button>
             <button className="v3-topbar-btn-icon" onClick={onClose} style={{ width: 24, height: 24 }}>
               <X size={14} />
             </button>
@@ -98,7 +115,7 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
               <span className="v3-compose-label">From</span>
               <span className="v3-compose-value" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="v3-status-dot online" />
-                Anish Kataria
+                {userName}
               </span>
             </div>
             <div className="v3-compose-row">
@@ -110,7 +127,6 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
               />
-              <span style={{ fontSize: 12, color: "var(--v3-text-ghost)", cursor: "pointer" }}>Cc / Bcc</span>
             </div>
             <div className="v3-compose-row">
               <span className="v3-compose-label">Subject</span>
@@ -123,6 +139,9 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
               />
             </div>
           </div>
+          {error && (
+            <div style={{ padding: "8px 20px", color: "var(--v3-accent-red, #ef4444)", fontSize: 12 }}>{error}</div>
+          )}
           <div style={{ padding: "16px 20px", minHeight: 200 }}>
             <textarea
               className="v3-textarea"
@@ -131,9 +150,6 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />
-            <p style={{ fontSize: 12, color: "var(--v3-text-ghost)", marginTop: 8 }}>
-              Sent with <span style={{ color: "var(--v3-text-link)" }}>Friday</span>
-            </p>
           </div>
         </div>
         <div
@@ -145,36 +161,17 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
             gap: 4,
           }}
         >
-          <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
-            <AtSign size={14} />
-          </button>
-          <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
-            <Image size={14} />
-          </button>
-          <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
-            <Code size={14} />
-          </button>
-          <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
-            <Paperclip size={14} />
-          </button>
-          <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
-            <LinkIcon size={14} />
-          </button>
-
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--v3-text-tertiary)" }}>
-              <div className="v3-toggle" />
-              Mass sending
-            </label>
-            <span style={{ color: "var(--v3-text-ghost)", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-              ⓘ
-            </span>
             <button className="v3-topbar-btn-icon" style={{ width: 28, height: 28 }}>
               <Trash2 size={14} />
             </button>
-            <button className="v3-btn-primary">
+            <button
+              className="v3-btn-primary"
+              onClick={handleSend}
+              disabled={sending || !to.trim() || !body.trim()}
+            >
               <Send size={12} />
-              Send email
+              {sending ? "Sending..." : "Send email"}
             </button>
           </div>
         </div>
@@ -183,12 +180,26 @@ function ComposeEmailModal({ onClose }: ComposeEmailModalProps) {
   );
 }
 
+function useSession() {
+  return useQuery<{ user: { name: string | null; email: string } | null }>({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/session");
+      if (!res.ok) return { user: null };
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 export default function V3EmailsPage() {
   const router = useRouter();
-  const { data, isLoading } = useEmailThreads();
+  const { data, isLoading, isError } = useEmailThreads();
+  const { data: sessionData } = useSession();
   const syncMutation = useSyncEmails();
   const [tab, setTab] = useState<"drafts" | "outbox" | "templates">("drafts");
   const [showCompose, setShowCompose] = useState(false);
+  const userName = sessionData?.user?.name || sessionData?.user?.email || "You";
 
   const threads = data?.threads ?? [];
 
@@ -209,10 +220,18 @@ export default function V3EmailsPage() {
           </span>
         </div>
         <div className="v3-page-header-right">
-          <span style={{ fontSize: 12, color: "var(--v3-text-tertiary)" }}>Help</span>
+          <button
+            className="v3-btn-secondary"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            style={{ fontSize: 12 }}
+          >
+            <RefreshCw size={13} className={syncMutation.isPending ? "animate-spin" : ""} />
+            {syncMutation.isPending ? "Syncing..." : "Sync"}
+          </button>
           <button className="v3-btn-primary" onClick={() => setShowCompose(true)}>
             <Mail size={14} />
-            Compose email
+            Compose
           </button>
         </div>
       </div>
@@ -235,6 +254,12 @@ export default function V3EmailsPage() {
       {/* Content */}
       {isLoading ? (
         <div style={{ padding: 24, textAlign: "center", color: "var(--v3-text-tertiary)" }}>Loading...</div>
+      ) : isError ? (
+        <div className="v3-empty-state">
+          <AlertCircle size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
+          <h3>Failed to load emails</h3>
+          <p>Something went wrong. Please try refreshing.</p>
+        </div>
       ) : currentList.length === 0 ? (
         <div className="v3-empty-state">
           <div style={{ width: 80, height: 80, marginBottom: 20, opacity: 0.15 }}>
@@ -258,8 +283,9 @@ export default function V3EmailsPage() {
           <table className="v3-table">
             <thead>
               <tr>
-                <th>Draft</th>
-                <th>Creation date</th>
+                <th>{tab === "outbox" ? "Sent email" : "Draft"}</th>
+                <th>{tab === "outbox" ? "Sent date" : "Created"}</th>
+                <th style={{ width: 32 }} />
               </tr>
             </thead>
             <tbody>
@@ -274,14 +300,15 @@ export default function V3EmailsPage() {
                       {thread.subject || "(no subject)"}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginTop: 2 }}>
-                      {thread.snippet?.slice(0, 60)}
+                      {thread.snippet?.slice(0, 80)}
                     </div>
                   </td>
-                  <td style={{ fontSize: 12, color: "var(--v3-text-tertiary)" }}>
+                  <td style={{ fontSize: 12, color: "var(--v3-text-tertiary)", whiteSpace: "nowrap" }}>
                     {thread.lastMessageAt
-                      ? new Date(thread.lastMessageAt).toLocaleDateString()
+                      ? new Date(thread.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                       : "—"}
                   </td>
+                  <td><ChevronRight size={14} className="v3-row-action" /></td>
                 </tr>
               ))}
             </tbody>
@@ -289,7 +316,7 @@ export default function V3EmailsPage() {
         </div>
       )}
 
-      {showCompose && <ComposeEmailModal onClose={() => setShowCompose(false)} />}
+      {showCompose && <ComposeEmailModal onClose={() => setShowCompose(false)} userName={userName} />}
     </div>
   );
 }
