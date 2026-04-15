@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireApiUser, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { emailThreads, followUpWorkflows } from "@/lib/db/schema";
-import { eq, and, lt, ne, or } from "drizzle-orm";
+import { contacts, emailMessages, emailThreads, followUpWorkflows } from "@/lib/db/schema";
+import { eq, and, lt, ne, inArray, desc } from "drizzle-orm";
 
 export interface WatchtowerAlert {
   id: string;
@@ -18,6 +18,8 @@ export interface WatchtowerAlert {
   description: string;
   threadId: string;
   threadSubject: string | null;
+  /** Contact name, last inbound sender, or short subject — for scannable task rows */
+  counterpartyLabel?: string | null;
   daysSinceLastAction: number;
   suggestedAction: string;
   urgency: "high" | "medium" | "low";
@@ -33,6 +35,86 @@ function formatAge(hours: number): string {
   if (hours < 24) return `${Math.round(hours)}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function truncateLabel(s: string, max: number): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+/** Resolve who the thread is about (contact → inbound sender → subject). */
+async function attachCounterpartyLabels(
+  userId: string,
+  alerts: WatchtowerAlert[]
+): Promise<WatchtowerAlert[]> {
+  if (alerts.length === 0) return alerts;
+
+  const threadIds = [...new Set(alerts.map((a) => a.threadId))];
+
+  const threadRows = await db
+    .select({ id: emailThreads.id, contactId: emailThreads.contactId })
+    .from(emailThreads)
+    .where(and(eq(emailThreads.userId, userId), inArray(emailThreads.id, threadIds)));
+
+  const threadContact = new Map(threadRows.map((r) => [r.id, r.contactId]));
+  const contactIds = [
+    ...new Set(threadRows.map((r) => r.contactId).filter((x): x is string => Boolean(x))),
+  ];
+
+  const contactRows =
+    contactIds.length > 0
+      ? await db
+          .select({ id: contacts.id, name: contacts.name, email: contacts.email })
+          .from(contacts)
+          .where(and(eq(contacts.userId, userId), inArray(contacts.id, contactIds)))
+      : [];
+
+  const contactById = new Map(contactRows.map((c) => [c.id, c]));
+
+  const threadsNeedingInbound = threadIds.filter((tid) => {
+    const cid = threadContact.get(tid) ?? null;
+    const c = cid ? contactById.get(cid) : undefined;
+    return !c?.name?.trim() && !c?.email?.trim();
+  });
+
+  const inboundByThread = new Map<string, string>();
+  if (threadsNeedingInbound.length > 0) {
+    const inboundMsgs = await db
+      .select({
+        threadId: emailMessages.threadId,
+        senderName: emailMessages.senderName,
+        senderEmail: emailMessages.senderEmail,
+        sentAt: emailMessages.sentAt,
+      })
+      .from(emailMessages)
+      .where(
+        and(inArray(emailMessages.threadId, threadsNeedingInbound), eq(emailMessages.direction, "inbound"))
+      )
+      .orderBy(desc(emailMessages.sentAt));
+
+    for (const m of inboundMsgs) {
+      if (inboundByThread.has(m.threadId)) continue;
+      const label = m.senderName?.trim() || m.senderEmail?.trim();
+      if (label) inboundByThread.set(m.threadId, label);
+    }
+  }
+
+  function labelFor(threadId: string, subject: string | null): string | null {
+    const cid = threadContact.get(threadId) ?? null;
+    const c = cid ? contactById.get(cid) : undefined;
+    const fromContact = c?.name?.trim() || c?.email?.trim();
+    if (fromContact) return truncateLabel(fromContact, 56);
+    const fromInbound = inboundByThread.get(threadId);
+    if (fromInbound) return truncateLabel(fromInbound, 56);
+    if (subject?.trim()) return truncateLabel(subject.trim(), 48);
+    return null;
+  }
+
+  return alerts.map((a) => ({
+    ...a,
+    counterpartyLabel: labelFor(a.threadId, a.threadSubject),
+  }));
 }
 
 export async function GET() {
@@ -239,17 +321,19 @@ export async function GET() {
     return b.daysSinceLastAction - a.daysSinceLastAction;
   });
 
+  const enriched = await attachCounterpartyLabels(user.userId, deduped);
+
   const summary = {
-    total: deduped.length,
-    high: deduped.filter((a) => a.urgency === "high").length,
-    recoverable: deduped.filter((a) =>
+    total: enriched.length,
+    high: enriched.filter((a) => a.urgency === "high").length,
+    recoverable: enriched.filter((a) =>
       ["lead_cooling", "lead_needs_reply", "proposal_forgotten", "scheduling_stall"].includes(
         a.type
       )
     ).length,
   };
 
-  return NextResponse.json({ alerts: deduped, summary });
+  return NextResponse.json({ alerts: enriched, summary });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -170,3 +170,47 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/** Remove event from Google Calendar and drop any stored brief for this user. */
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await requireApiUser();
+    let eventId: string | undefined;
+    try {
+      const body = (await request.json()) as { eventId?: string };
+      eventId = typeof body.eventId === "string" ? body.eventId.trim() : undefined;
+    } catch {
+      return NextResponse.json({ error: "JSON body required" }, { status: 400 });
+    }
+
+    if (!eventId) {
+      return NextResponse.json({ error: "eventId required" }, { status: 400 });
+    }
+
+    const calendar = await getAuthedCalendarClient(session.userId);
+    try {
+      await calendar.events.delete({ calendarId: "primary", eventId });
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status !== 404) throw err;
+    }
+
+    await db
+      .delete(meetingBriefs)
+      .where(
+        and(eq(meetingBriefs.userId, session.userId), eq(meetingBriefs.calendarEventId, eventId))
+      );
+
+    return NextResponse.json({ ok: true, deletedEventId: eventId });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Meeting briefs DELETE error:", e);
+    const message = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

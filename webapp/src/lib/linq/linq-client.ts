@@ -7,7 +7,7 @@
  *   LINQ_FROM_NUMBER – The phone number to send from (must be registered in Linq)
  */
 
-const BASE_URL = "https://api.linqapp.com/api/partner";
+const BASE_URL = "https://api.linqapp.com/api/partner/v3";
 
 function linqHeaders(): HeadersInit {
   const token = process.env.LINQ_API_TOKEN;
@@ -21,18 +21,34 @@ function linqHeaders(): HeadersInit {
 function fromNumber(): string {
   const num = process.env.LINQ_FROM_NUMBER;
   if (!num) throw new Error("LINQ_FROM_NUMBER is not set");
-  return num;
+  return num.trim();
 }
 
-// In-memory chat ID cache: phone → chatId
+/** Cache key: `${fromE164}:${toE164}` → chatId */
 const chatCache = new Map<string, string>();
 
-/** Create a new Linq chat with the given recipient and return its ID. */
-async function createChat(to: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/v3/chats`, {
+const PLACEHOLDER_INITIAL_TEXT = "\u2060";
+
+function cacheKey(from: string, to: string): string {
+  return `${from}:${to}`;
+}
+
+/** Create a new Linq chat with an initial message and return its ID (Partner v3). */
+async function createChatWithInitialMessage(
+  from: string,
+  to: string,
+  initialText: string
+): Promise<string> {
+  const res = await fetch(`${BASE_URL}/chats`, {
     method: "POST",
     headers: linqHeaders(),
-    body: JSON.stringify({ to, from: fromNumber() }),
+    body: JSON.stringify({
+      from,
+      to: [to],
+      message: {
+        parts: [{ type: "text", value: initialText }],
+      },
+    }),
   });
 
   if (!res.ok) {
@@ -40,8 +56,10 @@ async function createChat(to: string): Promise<string> {
     throw new Error(`Linq createChat failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as { chat: { id: string } };
-  return data.chat.id;
+  const data = (await res.json()) as { chat?: { id?: string } };
+  const id = data.chat?.id;
+  if (!id) throw new Error("Linq createChat: missing chat.id in response");
+  return id;
 }
 
 /**
@@ -49,11 +67,13 @@ async function createChat(to: string): Promise<string> {
  * and cache the result.
  */
 export async function getOrCreateChat(to: string): Promise<string> {
-  const cached = chatCache.get(to);
+  const from = fromNumber();
+  const key = cacheKey(from, to);
+  const cached = chatCache.get(key);
   if (cached) return cached;
 
-  const chatId = await createChat(to);
-  chatCache.set(to, chatId);
+  const chatId = await createChatWithInitialMessage(from, to, PLACEHOLDER_INITIAL_TEXT);
+  chatCache.set(key, chatId);
   return chatId;
 }
 
@@ -61,11 +81,13 @@ export async function getOrCreateChat(to: string): Promise<string> {
 export async function sendImessage(to: string, message: string): Promise<void> {
   const chatId = await getOrCreateChat(to);
 
-  const res = await fetch(`${BASE_URL}/v3/chats/${chatId}/messages`, {
+  const res = await fetch(`${BASE_URL}/chats/${chatId}/messages`, {
     method: "POST",
     headers: linqHeaders(),
     body: JSON.stringify({
-      parts: [{ type: "text", content: message }],
+      message: {
+        parts: [{ type: "text", value: message }],
+      },
     }),
   });
 
@@ -73,13 +95,16 @@ export async function sendImessage(to: string, message: string): Promise<void> {
     const text = await res.text();
     // If the chat is stale (e.g. 404), evict cache and retry once with a fresh chat
     if (res.status === 404) {
-      chatCache.delete(to);
+      const from = fromNumber();
+      chatCache.delete(cacheKey(from, to));
       const freshId = await getOrCreateChat(to);
-      const retry = await fetch(`${BASE_URL}/v3/chats/${freshId}/messages`, {
+      const retry = await fetch(`${BASE_URL}/chats/${freshId}/messages`, {
         method: "POST",
         headers: linqHeaders(),
         body: JSON.stringify({
-          parts: [{ type: "text", content: message }],
+          message: {
+            parts: [{ type: "text", value: message }],
+          },
         }),
       });
       if (!retry.ok) {
@@ -94,7 +119,7 @@ export async function sendImessage(to: string, message: string): Promise<void> {
 
 /** Register a webhook URL with Linq for the message.received event. */
 export async function registerWebhook(url: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/v3/webhooks`, {
+  const res = await fetch(`${BASE_URL}/webhooks`, {
     method: "POST",
     headers: linqHeaders(),
     body: JSON.stringify({ url, events: ["message.received"] }),
@@ -108,7 +133,7 @@ export async function registerWebhook(url: string): Promise<void> {
 
 /** List available phone numbers on this Linq account. */
 export async function listPhoneNumbers(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/v3/phone_numbers`, {
+  const res = await fetch(`${BASE_URL}/phone_numbers`, {
     headers: linqHeaders(),
   });
 
@@ -117,6 +142,9 @@ export async function listPhoneNumbers(): Promise<string[]> {
     throw new Error(`Linq listPhoneNumbers failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as { phone_numbers: Array<{ number: string }> };
-  return data.phone_numbers.map((p) => p.number);
+  const data = (await res.json()) as {
+    phone_numbers?: Array<{ phone_number?: string; number?: string }>;
+  };
+  const rows = data.phone_numbers ?? [];
+  return rows.map((p) => p.phone_number ?? p.number ?? "").filter(Boolean);
 }

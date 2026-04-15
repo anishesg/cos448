@@ -39,7 +39,15 @@ function useSession() {
 }
 
 function useWatchtowerAlerts() {
-  return useQuery<{ alerts: Array<{ id: string; type: string; title: string; threadId?: string }> }>({
+  return useQuery<{
+    alerts: Array<{
+      id: string;
+      type: string;
+      title: string;
+      threadId?: string;
+      counterpartyLabel?: string | null;
+    }>;
+  }>({
     queryKey: ["watchtower"],
     queryFn: async () => {
       const res = await fetch("/api/watchtower");
@@ -98,6 +106,7 @@ export default function V3HomePage() {
   const [aiQuery, setAiQuery] = useState("");
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: sessionData } = useSession();
   const { data: meetingsData } = useMeetings();
@@ -375,7 +384,14 @@ export default function V3HomePage() {
                     size={16}
                     style={{ color: "var(--v3-text-ghost)", flexShrink: 0 }}
                   />
-                  <span style={{ fontSize: 13, flex: 1 }}>{alert.title}</span>
+                  <span style={{ fontSize: 13, flex: 1, minWidth: 0 }}>
+                    {alert.counterpartyLabel && (
+                      <span style={{ color: "var(--v3-text-tertiary)", fontWeight: 500, marginRight: 6 }}>
+                        {alert.counterpartyLabel}
+                      </span>
+                    )}
+                    <span style={{ color: "var(--v3-text-primary)" }}>{alert.title}</span>
+                  </span>
                   <span
                     className={`v3-badge ${
                       alert.type === "lead_cooling"
@@ -394,6 +410,7 @@ export default function V3HomePage() {
         </div>
 
       </div>
+
     </div>
   );
 }

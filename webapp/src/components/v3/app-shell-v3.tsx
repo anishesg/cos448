@@ -10,8 +10,6 @@ import {
   FileText,
   Mail,
   ChevronRight,
-  Play,
-  Workflow,
   Search,
   LayoutGrid,
   Settings,
@@ -20,15 +18,20 @@ import {
   Shield,
   Eye,
   Calendar,
-  Megaphone,
   Monitor,
   Brain,
   Sparkles,
   X,
   MessageCircle,
   BarChart2,
+  Crosshair,
+  Play,
+  Megaphone,
+  Workflow,
+  HelpCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { DemoModeButton, DemoOverlay } from "./demo-overlay";
 
 interface NavItemProps {
   href: string;
@@ -128,6 +131,7 @@ interface AppShellV3Props {
 export function AppShellV3({ user, children }: AppShellV3Props) {
   const pathname = usePathname();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [demoActive, setDemoActive] = useState(false);
 
   const isActive = useCallback(
     (path: string) => pathname === path || pathname.startsWith(path + "/"),
@@ -276,6 +280,12 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
               label="Operator"
               active={isActive("/v3/operator")}
             />
+            <NavItem
+              href="/v3/lead-finder"
+              icon={<Crosshair size={14} />}
+              label="Lead Finder"
+              active={isActive("/v3/lead-finder")}
+            />
           </NavGroup>
 
           {/* AI Tools section */}
@@ -342,6 +352,21 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
 
         {/* Footer */}
         <div className="v3-sidebar-footer">
+          <div style={{ display: "flex", gap: 6, padding: "0 12px 8px" }}>
+            <DemoModeButton onClick={() => setDemoActive(true)} />
+            <button
+              title="Help"
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
+                fontSize: 11, fontWeight: 500, color: "var(--v3-text-ghost, #94a3b8)",
+                background: "transparent", border: "1px solid var(--v3-border, rgba(0,0,0,0.08))",
+                borderRadius: 6, cursor: "pointer", opacity: 0.6,
+              }}
+            >
+              <HelpCircle size={10} />
+              Help
+            </button>
+          </div>
           <div className="v3-sidebar-invite">
             <UserPlus size={14} />
             <span>Invite team members</span>
@@ -365,6 +390,11 @@ export function AppShellV3({ user, children }: AppShellV3Props) {
 
       {/* Main content */}
       <main className="v3-main">{children}</main>
+
+      {/* Demo overlay — persists across route changes */}
+      {demoActive && (
+        <DemoOverlay onStop={() => setDemoActive(false)} />
+      )}
     </div>
   );
 }

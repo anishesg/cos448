@@ -22,6 +22,7 @@ interface WatchtowerAlert {
   description?: string;
   threadId?: string;
   threadSubject?: string | null;
+  counterpartyLabel?: string | null;
   urgency?: string;
   daysSinceLastAction?: number;
   suggestedAction?: string;
@@ -237,7 +238,44 @@ export default function V3TasksPage() {
                       }}
                     />
                   </td>
-                  <td style={{ color: "var(--v3-text-primary)" }}>{alert.title}</td>
+                  <td>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 420 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        {alert.counterpartyLabel && (
+                          <span
+                            className="v3-badge v3-badge-blue"
+                            title={alert.counterpartyLabel}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              maxWidth: 200,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {alert.counterpartyLabel}
+                          </span>
+                        )}
+                        <span style={{ color: "var(--v3-text-primary)", fontWeight: 500 }}>{alert.title}</span>
+                      </div>
+                      {alert.threadSubject && (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--v3-text-tertiary)",
+                            lineHeight: 1.35,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={alert.threadSubject}
+                        >
+                          {alert.threadSubject}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <span style={{ color: alert.urgency === "high" ? "var(--v3-accent-red, #ef4444)" : "var(--v3-accent-amber)", fontSize: 12 }}>
                       {alert.urgency === "high" ? "Urgent" : (alert.daysSinceLastAction ?? 0) > 0 ? `${alert.daysSinceLastAction}d overdue` : "Due today"}

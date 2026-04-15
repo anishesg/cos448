@@ -19,6 +19,7 @@ interface Alert {
   urgency?: string;
   threadId?: string;
   threadSubject?: string | null;
+  counterpartyLabel?: string | null;
   suggestedAction?: string;
   daysSinceLastAction?: number;
 }
@@ -151,7 +152,25 @@ export default function V3WatchtowerPage() {
                         onClick={() => alert.threadId && router.push(`/v3/threads/${alert.threadId}`)}
                       >
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 400, color: "var(--v3-text-primary)" }}>{alert.title}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                            {alert.counterpartyLabel && (
+                              <span
+                                className="v3-badge v3-badge-blue"
+                                title={alert.counterpartyLabel}
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  maxWidth: 200,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {alert.counterpartyLabel}
+                              </span>
+                            )}
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--v3-text-primary)" }}>{alert.title}</div>
+                          </div>
                           {alert.description && (
                             <div style={{ fontSize: 12, color: "var(--v3-text-tertiary)", marginTop: 2 }}>
                               {alert.description}

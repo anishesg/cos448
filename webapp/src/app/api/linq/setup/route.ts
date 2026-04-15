@@ -64,12 +64,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Register the webhook with Linq
     const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ??
-      process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000";
+      process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-    const webhookUrl = `${appUrl}/api/linq/webhook`;
+    const webhookUrl = `${appUrl.replace(/\/$/, "")}/api/linq/webhook`;
 
     try {
       await registerWebhook(webhookUrl);

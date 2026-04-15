@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Calendar, Sparkles, Clock, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Sparkles, Clock, Users, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 
 interface MeetingEvent {
   id: string;
@@ -45,9 +45,29 @@ function useGenerateBrief() {
   });
 }
 
+function useDeleteMeeting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      const res = await fetch("/api/meetings/briefs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["meetings"] }),
+  });
+}
+
 export default function V3MeetingsPage() {
   const { data, isLoading, isError } = useMeetings();
   const generateBrief = useGenerateBrief();
+  const deleteMeeting = useDeleteMeeting();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [briefingId, setBriefingId] = useState<string | null>(null);
   const events = data?.events ?? [];
@@ -121,6 +141,25 @@ export default function V3MeetingsPage() {
                   >
                     <Sparkles size={12} />
                     {briefingId === event.id ? "Generating…" : "Brief"}
+                  </button>
+                  <button
+                    type="button"
+                    className="v3-btn-secondary"
+                    title="Remove from calendar and database"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        !confirm(
+                          `Remove "${event.summary}" from Google Calendar? Any saved brief for this event will be deleted.`
+                        )
+                      )
+                        return;
+                      deleteMeeting.mutate(event.id);
+                    }}
+                    disabled={deleteMeeting.isPending}
+                    style={{ fontSize: 12, color: "var(--v3-text-secondary)" }}
+                  >
+                    <Trash2 size={12} />
                   </button>
                   {expandedId === event.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </div>
